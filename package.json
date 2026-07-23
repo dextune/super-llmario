@@ -4,8 +4,9 @@
   "private": true,
   "description": "Browser action RPG with town, quests, loot, skill trees and six campaign regions",
   "scripts": {
+    "assemble": "node scripts/assemble-sources.js",
     "test": "node tests/rpg2-core.test.js && node tests/rpg2-smoke.test.js",
-    "check": "node -c js/rpg2-core.js && node -c js/rpg2-game.js && npm test"
+    "check": "node scripts/assemble-sources.js --check && npm test"
   },
   "engines": {
     "node": ">=18"

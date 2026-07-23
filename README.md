@@ -14,11 +14,11 @@
 - 버전 관리되는 localStorage 자동 저장
 - 외부 런타임 의존성 없는 Node 테스트
 
-상세 설계는 [`docs/RPG_EXPANSION_PLAN.md`](docs/RPG_EXPANSION_PLAN.md)를 참고하십시오.
+상세 설계와 완료 기준은 [`docs/RPG_EXPANSION_PLAN.md`](docs/RPG_EXPANSION_PLAN.md)를 참고하십시오.
 
 ## 실행
 
-정적 웹 서버로 저장소 루트를 제공하십시오.
+브라우저 부트스트랩이 소스 조각을 불러오므로 `file://`이 아니라 정적 웹 서버로 저장소 루트를 제공해야 합니다.
 
 ```bash
 python -m http.server 8000
@@ -44,26 +44,39 @@ python -m http.server 8000
 
 ## 테스트
 
-Node.js 18 이상에서 실행합니다.
+Node.js 18 이상에서 실행합니다. 외부 npm 패키지는 필요하지 않습니다.
 
 ```bash
 npm test
+npm run check
 ```
 
 테스트 구성:
 
-- `tests/rpg2-core.test.js`: 성장, 아이템, 상점, 강화, 퀘스트, 저장 단위 테스트
-- `tests/rpg2-smoke.test.js`: DOM/canvas 스텁 기반 전체 캠페인 런타임 테스트
+- `tests/rpg2-core.test.js`: 소스 무결성, 성장, 아이템, 상점, 강화, 퀘스트, 저장 단위 테스트
+- `tests/rpg2-smoke.test.js`: 실제 부트스트랩과 DOM/canvas 스텁 기반 전체 6지역 캠페인 테스트
+- `scripts/assemble-sources.js`: manifest에 따라 원본을 조립하고 바이트 길이·SHA-256·JavaScript 문법 검증
+
+배포용 단일 파일이 필요할 때 다음 명령으로 `dist/`에 조립할 수 있습니다.
+
+```bash
+npm run assemble
+```
 
 ## 구조
 
 ```text
-js/rpg2-core.js   RPG 도메인 로직
-js/rpg2-game.js   게임 상태, 필드 전투, UI, 저장
-css/rpg2.css      RPG 메타 UI
+index.html                    RPG 2 화면과 오버레이
+css/rpg2.css                  RPG 메타 UI
+js/bootstrap.js               브라우저 소스 조립·무결성 검증
+js/source-manifest.json       소스 순서·크기·SHA-256
+js/core.parts/*.part          순수 RPG 도메인 로직 원본
+js/game.parts/*.part          게임 상태·전투·UI·저장 런타임 원본
+scripts/assemble-sources.js   Node 조립·검증 도구
+tests/                        단위·전체 캠페인 테스트
 ```
 
-기존 버전의 소스는 비교와 참고를 위해 그대로 보존되어 있습니다. 현재 `index.html`은 RPG 2 런타임을 실행합니다.
+기존 버전의 소스는 비교와 참고를 위해 보존되어 있습니다. 현재 `index.html`은 RPG 2 부트스트랩을 실행합니다.
 
 ## 고지
 

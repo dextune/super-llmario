@@ -1,0 +1,179 @@
+        const spread = (i - (count - 1) / 2) * 0.11;
+        const roll = rollPlayerDamage(1.35 * (1 + (stats.effects.primaryDamagePct || 0) / 100), true);
+        fireProjectile('player', 'fireball', centerX(player) + player.face * 16, centerY(player), player.face * 430, spread * 430, roll.damage + stats.fireDamage, { color: '#ff7b3d', crit: roll.crit, w: 20, h: 20, radius: 62, burn: true });
+      }
+      sfx('fireball');
+    } else {
+      const count = 3 + Math.min(3, stats.effects.multishotExtra || 0);
+      for (let i = 0; i < count; i++) {
+        const spread = (i - (count - 1) / 2) * 0.085;
+        const roll = rollPlayerDamage(1.0 * (1 + (stats.effects.primaryDamagePct || 0) / 100), true);
+        fireProjectile('player', 'arrow', centerX(player), centerY(player), player.face * 680, spread * 680, roll.damage, { color: '#72f39a', crit: roll.crit, w: 22, h: 7 });
+      }
+      sfx('slash2');
+    }
+  }
+
+  function secondarySkill() {
+    if (!player || state !== STATE.FIELD || player.secondaryCd > 0) return;
+    const ability = RPG.abilityNumbers(profile)[2];
+    if (player.mp < ability.cost) { toast('마나가 부족합니다.', '#78a9ff'); return; }
+    player.mp -= ability.cost;
+    player.secondaryCd = ability.cooldown;
+    const cls = profile.classId;
+    if (cls === 'vanguard') {
+      player.guardT = 2.2 + (stats.effects.guardDuration || 0);
+      addEffect('aura', centerX(player), centerY(player), { color: '#7fc8ff', r: 46, life: player.guardT, maxLife: player.guardT });
+      toast('철벽 태세', '#8ad5ff');
+    } else if (cls === 'arcanist') {
+      const range = 155;
+      for (const e of enemyAtPoint(centerX(player), centerY(player), range)) {
+        const roll = rollPlayerDamage(1.15 * (1 + (stats.effects.secondaryDamagePct || 0) / 100), true, e);
+        damageEnemy(e, roll.damage + stats.frostDamage, { crit: roll.crit, freeze: 1.25 + (stats.effects.freezeDuration || 0), color: '#74d9ff', knockback: 3 });
+      }
+      addEffect('nova', centerX(player), centerY(player), { color: '#74d9ff', r: range, life: 0.65, maxLife: 0.65 });
+      sfx('freeze');
+    } else {
+      player.dashT = 0.34;
+      player.invuln = Math.max(player.invuln, 0.34 + (stats.effects.dashInvuln || 0));
+      player.vx = player.face * 820;
+      if (stats.effects.freeShotAfterDash) player.freePrimary = true;
+      for (const e of enemyAtPoint(centerX(player) + player.face * 60, centerY(player), 105)) {
+        const roll = rollPlayerDamage(1.05, true, e); damageEnemy(e, roll.damage, { crit: roll.crit, dir: player.face, color: '#72f39a' });
+      }
+      addEffect('dash', centerX(player), centerY(player), { color: '#72f39a', r: 70, life: 0.38, maxLife: 0.38, face: player.face });
+      if (hasUnique('stormstep')) {
+        for (const e of enemyAtPoint(centerX(player), centerY(player), 130)) {
+          const roll = rollPlayerDamage(0.55, true, e); damageEnemy(e, roll.damage, { color: '#ffe66d' });
+        }
+      }
+      sfx('powerup');
+    }
+  }
+
+  function usePotion(kind) {
+    if (!player || state !== STATE.FIELD || player.potionLock > 0) return;
+    if (profile.potions[kind] <= 0) { toast((kind === 'hp' ? '체력' : '마나') + ' 물약이 없습니다.', '#ff8c8c'); return; }
+    if (kind === 'hp' && player.hp >= stats.maxHp) return;
+    if (kind === 'mp' && player.mp >= stats.maxMp) return;
+    profile.potions[kind]--;
+    player.potionLock = 0.45;
+    if (kind === 'hp') {
+      const amount = Math.round(stats.maxHp * 0.42);
+      player.hp = Math.min(stats.maxHp, player.hp + amount);
+      addFloat(centerX(player), player.y - 10, '+' + amount + ' HP', '#63f58a');
+    } else {
+      const amount = Math.round(stats.maxMp * 0.48);
+      player.mp = Math.min(stats.maxMp, player.mp + amount);
+      addFloat(centerX(player), player.y - 10, '+' + amount + ' MP', '#66a5ff');
+    }
+    sfx('potion');
+  }
+
+  function openChest(chest) {
+    if (!chest || chest.opened) return;
+    chest.opened = true;
+    world.chestsOpened++;
+    if (chest.key) {
+      world.keyFound = true;
+      toast('봉인 열쇠를 획득했습니다!', '#ffe66d');
+      spawnDrop(chest.x + 18, chest.y - 10, 'key', 1);
+    }
+    spawnDrop(chest.x + 8, chest.y - 5, 'gold', 45 + world.stage.level * 16);
+    spawnDrop(chest.x + 26, chest.y - 12, 'item', RPG.createItem(world.stage.level + 1, world.rng, { rarity: chest.rarity, luck: 9 }));
+    addEffect('burst', centerX(chest), centerY(chest), { color: '#ffe66d', r: 34 });
+    sfx('itemdrop');
+    updateObjective();
+  }
+
+  function pickupDrop(drop) {
+    if (drop.picked) return;
+    if (drop.kind === 'gold') {
+      profile.gold += drop.payload; addFloat(drop.x, drop.y, '+' + drop.payload + 'G', '#ffe66d');
+    } else if (drop.kind === 'item') {
+      if (profile.inventory.length >= RPG.INVENTORY_CAP) { addFloat(drop.x, drop.y, '가방 가득', '#ff7474'); return; }
+      profile.inventory.push(drop.payload); addFloat(drop.x, drop.y, drop.payload.name, rarityColor(drop.payload.rarity));
+    } else if (drop.kind === 'hp' || drop.kind === 'mp') {
+      profile.potions[drop.kind] += drop.payload || 1; addFloat(drop.x, drop.y, (drop.kind === 'hp' ? '체력' : '마나') + ' 물약', '#8ddcff');
+    } else if (drop.kind === 'key') {
+      addFloat(drop.x, drop.y, '봉인 열쇠', '#ffe66d');
+    }
+    drop.picked = true;
+    sfx('itempick');
+  }
+
+  function updatePlayer(dt) {
+    if (!player) return;
+    const move = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+    const slow = player.slowT > 0 ? 0.65 : 1;
+    const targetSpeed = (input.run ? stats.move * 100 * 1.45 : stats.move * 100) * slow;
+    if (player.dashT > 0) {
+      player.dashT -= dt;
+    } else if (move) {
+      player.face = move;
+      player.vx += move * (player.onGround ? 1850 : 1080) * dt;
+      player.vx = clamp(player.vx, -targetSpeed, targetSpeed);
+    } else {
+      player.vx *= player.onGround ? Math.pow(0.0008, dt) : Math.pow(0.15, dt);
+      if (Math.abs(player.vx) < 4) player.vx = 0;
+    }
+    player.jumpBuffer = Math.max(0, player.jumpBuffer - dt);
+    if (player.onGround) player.coyote = 0.11; else player.coyote = Math.max(0, player.coyote - dt);
+    if (player.jumpBuffer > 0 && player.coyote > 0) {
+      player.vy = -650; player.onGround = false; player.coyote = 0; player.jumpBuffer = 0; sfx('jump');
+    }
+    if (!input.jump && player.vy < -230) player.vy += 1300 * dt;
+    moveEntityPhysics(player, dt, true);
+    if (player.attackCd > 0) player.attackCd -= dt;
+    if (player.attackT > 0) player.attackT -= dt;
+    if (player.comboT > 0) player.comboT -= dt; else player.combo = 0;
+    if (player.primaryCd > 0) player.primaryCd -= dt;
+    if (player.secondaryCd > 0) player.secondaryCd -= dt;
+    if (player.invuln > 0) player.invuln -= dt;
+    if (player.guardT > 0) player.guardT -= dt;
+    if (player.slowT > 0) player.slowT -= dt;
+    if (player.potionLock > 0) player.potionLock -= dt;
+    player.hp = Math.min(stats.maxHp, player.hp + stats.hpRegen * dt);
+    player.mp = Math.min(stats.maxMp, player.mp + stats.mpRegen * (1 + (stats.effects.manaRegenPct || 0) / 100) * dt);
+
+    for (const chest of world.chests) if (!chest.opened && overlap(player, chest)) openChest(chest);
+    for (const drop of world.drops) if (!drop.picked && Math.hypot(centerX(player) - centerX(drop), centerY(player) - centerY(drop)) < 42) pickupDrop(drop);
+    if (overlap(player, world.gate)) {
+      if (world.gateOpen) completeCurrentStage();
+      else if (toastTimer <= 0.2) toast('관문이 봉인되어 있습니다. 목표를 완료하십시오.', '#ffcf69');
+    }
+    world.cameraX = clamp(centerX(player) - VIEW_W * 0.36, 0, world.width - VIEW_W);
+    const checkpoint = Math.floor(player.x / 1200) * 1200 + 70;
+    if (checkpoint > world.checkpoint) world.checkpoint = checkpoint;
+  }
+
+  function shootAtPlayer(enemy, kind, speed) {
+    const dx = centerX(player) - centerX(enemy), dy = centerY(player) - centerY(enemy);
+    const len = Math.hypot(dx, dy) || 1;
+    fireProjectile('enemy', kind || 'enemy', centerX(enemy), centerY(enemy), dx / len * (speed || 260), dy / len * (speed || 260), enemy.damage, { color: enemy.type === 'demon' ? '#ff7040' : '#d8e1f0', w: 14, h: 10 });
+  }
+
+  function updateBoss(enemy, dt) {
+    const ratio = enemy.hp / enemy.maxHp;
+    const phase = ratio > 0.68 ? 1 : ratio > 0.34 ? 2 : 3;
+    if (phase !== enemy.bossPhase) {
+      enemy.bossPhase = phase; enemy.stateT = 0; world.shake = 0.5;
+      toast('쿠파 대왕 · ' + phase + '단계', '#ff6760');
+      if (phase === 2) {
+        world.enemies.push(makeEnemy('shaman', enemy.x - 150, world.stageIndex, null, world.rng));
+        world.enemies.push(makeEnemy('charger', enemy.x + 150, world.stageIndex, null, world.rng));
+      }
+    }
+    enemy.stateT -= dt;
+    const dx = centerX(player) - centerX(enemy);
+    enemy.face = dx >= 0 ? 1 : -1;
+    if (enemy.stateT <= 0) {
+      const pattern = world.rng.int(0, phase + 1);
+      if (pattern <= 1) {
+        const shots = 2 + phase;
+        for (let i = 0; i < shots; i++) {
+          const angle = -0.32 + i * (0.64 / Math.max(1, shots - 1));
+          fireProjectile('enemy', 'bossfire', centerX(enemy), enemy.y + 22, enemy.face * Math.cos(angle) * 320, Math.sin(angle) * 320, enemy.damage * 0.72, { color: '#ff5b32', w: 20, h: 20, radius: 45 });
+        }
+      } else if (pattern === 2) {
+        addEffect('shockwave', centerX(enemy), GROUND_Y, { color: '#ff6b45', r: 210, life: 1.0, maxLife: 1.0 });

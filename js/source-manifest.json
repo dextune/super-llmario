@@ -1,0 +1,32 @@
+{
+  "rpg2-core.js": {
+    "parts": [
+      "js/core.parts/01.part",
+      "js/core.parts/02.part",
+      "js/core.parts/03.part",
+      "js/core.parts/04.part",
+      "js/core.parts/05.part"
+    ],
+    "bytes": 43680,
+    "sha256": "37aa000f32c97843d218d8b527196f9e4b16b34dbed3acea2d65e46900d3c4d8",
+    "git_blob_sha1": "5cfb0c5ae2ae8a9a0059015d339da868ea577d1b",
+    "part_count": 5
+  },
+  "rpg2-game.js": {
+    "parts": [
+      "js/game.parts/01.part",
+      "js/game.parts/02.part",
+      "js/game.parts/03.part",
+      "js/game.parts/04.part",
+      "js/game.parts/05.part",
+      "js/game.parts/06.part",
+      "js/game.parts/07.part",
+      "js/game.parts/08.part",
+      "js/game.parts/09.part"
+    ],
+    "bytes": 80205,
+    "sha256": "bb7bf3477ba142b2da5ca491962e92c176c46c3d6380a5b6d7f4007de44c3e49",
+    "git_blob_sha1": "2b506586731b683bb01f951655aa42062c931e10",
+    "part_count": 9
+  }
+}

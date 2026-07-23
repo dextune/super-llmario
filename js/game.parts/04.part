@@ -1,0 +1,167 @@
+    if (enemy.role === 'boss') toast('쿠파 대왕을 쓰러뜨렸습니다! 관문으로 이동하십시오.', '#ffe66d');
+    updateObjective();
+    addEffect('burst', centerX(enemy), centerY(enemy), { color: enemy.elite ? enemy.elite.color : enemy.def.color, r: enemy.role === 'boss' ? 52 : 24, life: 0.7, maxLife: 0.7 });
+    sfx('enemydie');
+  }
+
+  function hurtPlayer(amount, source) {
+    if (!player || player.invuln > 0 || state !== STATE.FIELD) return;
+    if (Math.random() * 100 < (stats.dodge || 0)) { addFloat(centerX(player), player.y - 8, '회피', '#92f2ff'); player.invuln = 0.25; return; }
+    let reduction = stats.armor / (stats.armor + 70 + world.stage.level * 7);
+    if (player.guardT > 0) reduction += 0.45 + (stats.effects.guardReduction || 0) / 100;
+    const damage = Math.max(1, Math.round(amount * clamp(1 - reduction, 0.12, 1)));
+    player.hp -= damage;
+    player.invuln = 0.7;
+    if (source) { player.vx = centerX(player) < centerX(source) ? -4.5 : 4.5; player.vy = -5; }
+    addFloat(centerX(player), player.y - 10, '-' + damage, '#ff6060', 16);
+    world.shake = 0.28;
+    sfx('hurt');
+    if (player.hp <= 0) failStage('전투 불능');
+  }
+
+  function failStage(reason) {
+    if (!profile || !world || world.finished) return;
+    if (hasUnique('phoenix') && !world.phoenixUsed) {
+      world.phoenixUsed = true;
+      player.hp = stats.maxHp * 0.35;
+      player.mp = stats.maxMp * 0.35;
+      player.invuln = 2;
+      toast('불사조의 외투가 치명상을 막았습니다!', '#ff9f5a');
+      return;
+    }
+    world.finished = true;
+    world.deaths++;
+    const lost = RPG.registerDeath(profile);
+    saveProfile(true);
+    try { Audio.musicStop(); } catch (_) {}
+    const reasonEl = $('over-reason'); if (reasonEl) reasonEl.textContent = reason + ' · 골드 ' + fmt(lost) + 'G 손실';
+    const scoreEl = $('over-score'); if (scoreEl) scoreEl.textContent = fmt(profile.gold);
+    setState(STATE.OVER, 'over');
+  }
+
+  function updateObjective() {
+    if (!world) return;
+    const type = world.stage.objectiveType;
+    if (type === 'kills') world.objectiveCount = world.kills;
+    else if (type === 'elite') world.objectiveCount = world.elitesKilled;
+    else if (type === 'key') world.objectiveCount = world.keyFound ? 1 : 0;
+    else if (type === 'cores') world.objectiveCount = world.cores.filter(c => c.dead).length;
+    else if (type === 'boss') world.objectiveCount = world.bossKilled ? 1 : 0;
+    else if (type === 'survive') world.objectiveCount = 1;
+    world.objectiveDone = world.objectiveCount >= world.stage.objectiveTarget;
+    world.gateOpen = world.objectiveDone;
+  }
+
+  function completeCurrentStage() {
+    if (!world || world.finished) return;
+    world.finished = true;
+    const result = RPG.completeStage(profile, world.stageIndex, {
+      elapsed: world.elapsed, deaths: world.deaths, objective: world.objectiveDone,
+      kills: world.kills, chests: world.chestsOpened, elites: world.elitesKilled, boss: world.bossKilled,
+    }, world.rng);
+    saveProfile(true);
+    try { Audio.musicStop(); } catch (_) {}
+    const stars = $('clear-stars'); if (stars) stars.textContent = '★'.repeat(result.stars) + '☆'.repeat(3 - result.stars);
+    const title = $('clear-title'); if (title) title.textContent = world.stage.name + ' 완료';
+    const rewards = $('clear-rewards');
+    if (rewards) rewards.innerHTML = '골드 +' + fmt(result.rewards.gold) + ' · 경험치 +' + fmt(result.rewards.xp) + ' · 재료 +' + result.rewards.materials +
+      (result.rewards.item ? '<br><b style="color:' + rarityColor(result.rewards.item.rarity) + '">' + esc(result.rewards.item.name) + '</b> 획득' : '<br>가방이 가득 차 보상 장비를 놓쳤습니다.');
+    setState(profile.won && world.stageIndex === RPG.STAGES.length - 1 ? STATE.WIN : STATE.CLEAR, profile.won && world.stageIndex === RPG.STAGES.length - 1 ? 'win' : 'clear');
+    sfx('flag');
+  }
+
+  function groundExistsAt(x) { return world && !gapAt(world, x); }
+
+  function moveEntityPhysics(entity, dt, isPlayer) {
+    entity.vy += 1700 * dt;
+    entity.vy = Math.min(entity.vy, 720);
+    entity.x += entity.vx * dt;
+    entity.y += entity.vy * dt;
+    entity.onGround = false;
+    const feetX = entity.x + entity.w / 2;
+    const prevBottom = entity.y + entity.h - entity.vy * dt;
+    if (groundExistsAt(feetX) && entity.y + entity.h >= GROUND_Y && prevBottom <= GROUND_Y + 12 && entity.vy >= 0) {
+      entity.y = GROUND_Y - entity.h;
+      entity.vy = 0;
+      entity.onGround = true;
+    }
+    for (const platform of world.platforms) {
+      if (entity.x + entity.w <= platform.x || entity.x >= platform.x + platform.w) continue;
+      if (entity.vy >= 0 && entity.y + entity.h >= platform.y && prevBottom <= platform.y + 8) {
+        entity.y = platform.y - entity.h; entity.vy = 0; entity.onGround = true; break;
+      }
+    }
+    if (isPlayer) {
+      entity.x = clamp(entity.x, 0, world.width - entity.w);
+      if (entity.y > VIEW_H + 180) failStage('추락');
+    } else if (entity.y > VIEW_H + 120) {
+      // 필수 목표 적이 지형 틈으로 사라져 진행이 막히지 않도록 가까운 지면으로 복귀시킨다.
+      const origin = clamp(entity.x, 30, world.width - entity.w - 30);
+      let landing = origin;
+      for (let d = 0; d <= 520; d += 40) {
+        if (groundExistsAt(origin - d)) { landing = origin - d; break; }
+        if (groundExistsAt(origin + d)) { landing = origin + d; break; }
+      }
+      entity.x = clamp(landing, 0, world.width - entity.w);
+      entity.y = GROUND_Y - entity.h;
+      entity.vx = 0; entity.vy = 0; entity.onGround = true;
+    }
+  }
+
+  function fireProjectile(owner, kind, x, y, vx, vy, damage, options) {
+    const target = owner === 'player' ? world.projectiles : world.enemyProjectiles;
+    target.push(Object.assign({ owner, kind, x, y, vx, vy, w: 16, h: 10, damage, life: 4, pierce: 0, color: '#fff', crit: false }, options || {}));
+  }
+
+  function basicAttack() {
+    if (!player || state !== STATE.FIELD || player.attackCd > 0) return;
+    const cls = profile.classId;
+    player.combo = player.comboT > 0 ? (player.combo % 3) + 1 : 1;
+    player.comboT = 0.65;
+    player.attackCd = player.combo === 3 ? 0.38 : 0.22;
+    player.attackT = 0.18;
+    if (cls === 'vanguard') {
+      const hb = { x: player.face > 0 ? player.x + player.w : player.x - 70, y: player.y - 8, w: 70, h: player.h + 16 };
+      for (const e of world.enemies) if (!e.dead && overlap(hb, e)) {
+        const roll = rollPlayerDamage([0, 0.85, 1.0, 1.35][player.combo], false, e);
+        damageEnemy(e, roll.damage, { crit: roll.crit, dir: player.face, knockback: player.combo === 3 ? 5 : 2, breakGuard: player.combo === 3 });
+      }
+      for (const core of world.cores) if (!core.dead && overlap(hb, core)) damageCore(core, Math.round(stats.attack * (player.combo === 3 ? 1.5 : 0.8)));
+      for (const chest of world.chests) if (!chest.opened && overlap(hb, chest)) openChest(chest);
+      addEffect('slash', player.face > 0 ? player.x + player.w + 18 : player.x - 18, centerY(player), { color: profile.classId === 'vanguard' ? '#ffe7a1' : '#fff', r: 42, life: 0.22, maxLife: 0.22, face: player.face });
+    } else {
+      const roll = rollPlayerDamage(cls === 'arcanist' ? 0.72 : 0.78, false);
+      fireProjectile('player', cls === 'arcanist' ? 'arcane' : 'arrow', centerX(player) + player.face * 15, centerY(player) - 4, player.face * (cls === 'arcanist' ? 520 : 650), 0, roll.damage, { color: cls === 'arcanist' ? '#ad8cff' : '#a8ffbd', crit: roll.crit, w: 18, h: 8, pierce: player.combo === 3 ? 1 : 0 });
+    }
+    sfx('slash' + Math.min(3, player.combo));
+  }
+
+  function primarySkill() {
+    if (!player || state !== STATE.FIELD || player.primaryCd > 0) return;
+    const abilities = RPG.abilityNumbers(profile);
+    const ability = abilities[1];
+    const free = player.freePrimary;
+    if (!free && player.mp < ability.cost) { toast('마나가 부족합니다.', '#78a9ff'); return; }
+    if (!free) player.mp -= ability.cost;
+    player.freePrimary = false;
+    player.primaryCd = ability.cooldown;
+    const cls = profile.classId;
+    if (cls === 'vanguard') {
+      const range = 118 * (1 + (stats.effects.primaryRangePct || 0) / 100);
+      const originX = centerX(player) + player.face * 28;
+      for (const e of enemyAtPoint(originX, centerY(player), range)) {
+        const roll = rollPlayerDamage(1.75 * (1 + (stats.effects.primaryDamagePct || 0) / 100), true, e);
+        const killed = damageEnemy(e, roll.damage, { crit: roll.crit, dir: Math.sign(centerX(e) - originX) || player.face, knockback: 7, breakGuard: true, color: '#ffd45f' });
+        if (killed && stats.effects.slamResetOnKill) player.primaryCd = 0;
+      }
+      for (const core of world.cores) if (!core.dead && Math.abs(centerX(core) - originX) < range) damageCore(core, Math.round(stats.attack * 2.2));
+      if (hasUnique('earthbreaker')) {
+        for (const e of enemyAtPoint(originX + player.face * range * 0.55, centerY(player), range * 0.8)) {
+          const roll = rollPlayerDamage(0.9, true, e); damageEnemy(e, roll.damage, { crit: roll.crit, breakGuard: true, color: '#ff9b45' });
+        }
+      }
+      addEffect('shockwave', originX, GROUND_Y - 8, { color: '#ffd45f', r: range, life: 0.55, maxLife: 0.55 });
+      world.shake = 0.35;
+    } else if (cls === 'arcanist') {
+      const count = 1 + Math.min(3, stats.effects.fireballExtra || 0);
+      for (let i = 0; i < count; i++) {

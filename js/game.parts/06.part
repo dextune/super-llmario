@@ -1,0 +1,166 @@
+        if (Math.abs(centerX(player) - centerX(enemy)) < 210 && player.onGround) hurtPlayer(enemy.damage * 1.15, enemy);
+        world.shake = 0.45;
+      } else {
+        const count = phase === 3 ? 3 : 2;
+        for (let i = 0; i < count; i++) world.enemies.push(makeEnemy('minion', enemy.x + (i - 1) * 75, world.stageIndex, null, world.rng));
+      }
+      enemy.stateT = Math.max(1.2, 3.2 - phase * 0.45);
+    }
+    if (Math.abs(dx) > 130) enemy.vx += Math.sign(dx) * enemy.speed * 160 * dt;
+    else enemy.vx *= 0.85;
+    enemy.vx = clamp(enemy.vx, -enemy.speed * 110 * phase, enemy.speed * 110 * phase);
+    moveEntityPhysics(enemy, dt, false);
+    if (overlap(player, enemy) && enemy.attackCd <= 0) { hurtPlayer(enemy.damage, enemy); enemy.attackCd = 1.15; }
+  }
+
+  function updateEnemy(enemy, dt) {
+    if (enemy.dead) return;
+    if (enemy.hitFlash > 0) enemy.hitFlash -= dt;
+    if (enemy.attackCd > 0) enemy.attackCd -= dt;
+    if (enemy.skillCd > 0) enemy.skillCd -= dt;
+    if (enemy.frozen > 0) { enemy.frozen -= dt; enemy.vx *= 0.65; return; }
+    if (enemy.burn > 0) {
+      enemy.burn -= dt;
+      enemy._burnTick = (enemy._burnTick || 0) - dt;
+      if (enemy._burnTick <= 0) { enemy._burnTick = 0.5; damageEnemy(enemy, enemy.burnDps * 0.5, { color: '#ff793f', dir: 0 }); }
+    }
+    if (enemy.dead) return;
+    if (enemy.role === 'boss') { updateBoss(enemy, dt); return; }
+    const dx = centerX(player) - centerX(enemy), dy = centerY(player) - centerY(enemy);
+    const distance = Math.abs(dx);
+    if (distance < 720) enemy.aggro = true;
+    if (!enemy.aggro) return;
+    enemy.face = dx >= 0 ? 1 : -1;
+
+    if (enemy.eliteId === 'frost' && Math.hypot(dx, dy) < 150) player.slowT = Math.max(player.slowT, 0.35);
+    if (enemy.eliteId === 'blink') {
+      enemy.blinkCd -= dt;
+      if (enemy.blinkCd <= 0) { enemy.x = clamp(player.x - enemy.face * (110 + Math.random() * 80), 0, world.width - enemy.w); enemy.blinkCd = 4.2; addEffect('blink', centerX(enemy), centerY(enemy), { color: enemy.elite.color, r: 32 }); }
+    }
+
+    if (enemy.role === 'flying') {
+      enemy.stateT += dt * 4;
+      const len = Math.hypot(dx, dy) || 1;
+      enemy.vx = dx / len * enemy.speed * 95;
+      enemy.vy = dy / len * enemy.speed * 70 + Math.sin(enemy.stateT) * 24;
+      enemy.x += enemy.vx * dt; enemy.y += enemy.vy * dt;
+    } else if (enemy.role === 'ranged') {
+      if (distance > 270) enemy.vx += Math.sign(dx) * enemy.speed * 320 * dt;
+      else if (distance < 170) enemy.vx -= Math.sign(dx) * enemy.speed * 380 * dt;
+      else enemy.vx *= 0.82;
+      enemy.vx = clamp(enemy.vx, -enemy.speed * 85, enemy.speed * 85);
+      moveEntityPhysics(enemy, dt, false);
+      if (enemy.skillCd <= 0 && distance < 560) { shootAtPlayer(enemy, enemy.type === 'demon' ? 'fire' : 'bone', enemy.type === 'demon' ? 330 : 285); enemy.skillCd = enemy.type === 'demon' ? 1.45 : 1.9; }
+    } else if (enemy.role === 'healer') {
+      enemy.vx += Math.sign(dx) * enemy.speed * 180 * dt;
+      enemy.vx = clamp(enemy.vx, -55, 55);
+      moveEntityPhysics(enemy, dt, false);
+      if (enemy.skillCd <= 0) {
+        const target = world.enemies.filter(e => !e.dead && e !== enemy && Math.abs(e.x - enemy.x) < 260).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+        if (target && target.hp < target.maxHp) { const heal = Math.round(target.maxHp * 0.12); target.hp = Math.min(target.maxHp, target.hp + heal); addFloat(centerX(target), target.y - 10, '+' + heal, '#6dff91'); addEffect('heal', centerX(target), centerY(target), { color: '#6dff91', r: 30 }); }
+        else shootAtPlayer(enemy, 'shadow', 250);
+        enemy.skillCd = 3.2;
+      }
+    } else if (enemy.role === 'summoner') {
+      enemy.vx *= 0.8; moveEntityPhysics(enemy, dt, false);
+      if (enemy.skillCd <= 0 && world.enemies.filter(e => !e.dead && e.type === 'minion').length < 7) {
+        world.enemies.push(makeEnemy('minion', enemy.x - 45, world.stageIndex, null, world.rng));
+        world.enemies.push(makeEnemy('minion', enemy.x + 45, world.stageIndex, null, world.rng));
+        addEffect('summon', centerX(enemy), centerY(enemy), { color: '#b273ff', r: 46 }); enemy.skillCd = 5.0;
+      }
+    } else if (enemy.role === 'charger') {
+      if (enemy.state === 'telegraph') {
+        enemy.stateT -= dt; enemy.vx *= 0.75;
+        if (enemy.stateT <= 0) { enemy.state = 'charge'; enemy.stateT = 0.65; enemy.vx = enemy.face * 520; }
+      } else if (enemy.state === 'charge') {
+        enemy.stateT -= dt; moveEntityPhysics(enemy, dt, false);
+        if (enemy.stateT <= 0) { enemy.state = 'cooldown'; enemy.stateT = 1.5; }
+      } else if (enemy.state === 'cooldown') {
+        enemy.stateT -= dt; enemy.vx *= 0.82; moveEntityPhysics(enemy, dt, false);
+        if (enemy.stateT <= 0) enemy.state = 'idle';
+      } else if (distance < 360) { enemy.state = 'telegraph'; enemy.stateT = 0.65; addFloat(centerX(enemy), enemy.y - 8, '돌진!', '#ffb05d'); }
+      else { enemy.vx += Math.sign(dx) * enemy.speed * 250 * dt; enemy.vx = clamp(enemy.vx, -80, 80); moveEntityPhysics(enemy, dt, false); }
+    } else {
+      enemy.vx += Math.sign(dx) * enemy.speed * 290 * dt;
+      enemy.vx = clamp(enemy.vx, -enemy.speed * 90, enemy.speed * 90);
+      moveEntityPhysics(enemy, dt, false);
+    }
+
+    if (overlap(player, enemy) && enemy.attackCd <= 0) {
+      hurtPlayer(enemy.damage * (enemy.state === 'charge' ? 1.45 : 1), enemy);
+      if (enemy.eliteId === 'vampiric') enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.damage * 1.5);
+      enemy.attackCd = 1.0;
+    }
+  }
+
+  function projectileHitsSolid(p) {
+    if (p.y > GROUND_Y && groundExistsAt(p.x)) return true;
+    return world.platforms.some(platform => p.x + p.w > platform.x && p.x < platform.x + platform.w && p.y + p.h > platform.y && p.y < platform.y + platform.h);
+  }
+
+  function explodeProjectile(p, enemyOwner) {
+    const radius = p.radius || 48;
+    addEffect('explosion', centerX(p), centerY(p), { color: p.color, r: radius, life: 0.5, maxLife: 0.5 });
+    if (enemyOwner) {
+      if (Math.hypot(centerX(player) - centerX(p), centerY(player) - centerY(p)) < radius) hurtPlayer(p.damage, p);
+    } else {
+      for (const e of enemyAtPoint(centerX(p), centerY(p), radius)) {
+        const roll = rollPlayerDamage(0.45, true, e);
+        damageEnemy(e, Math.round(p.damage * 0.5 + roll.damage), { color: p.color, burn: p.burn ? { duration: 3, dps: Math.max(2, (stats.fireDamage + stats.attack * 0.12) * (1 + (stats.effects.burnDamagePct || 0) / 100)) } : null, crit: p.crit });
+      }
+    }
+  }
+
+  function updateProjectiles(dt) {
+    for (const p of world.projectiles) {
+      p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      if (projectileHitsSolid(p)) { if (p.radius) explodeProjectile(p, false); p.life = 0; continue; }
+      for (const core of world.cores) if (!core.dead && overlap(p, core)) { damageCore(core, p.damage); p.life = 0; break; }
+      if (p.life <= 0) continue;
+      for (const e of world.enemies) {
+        if (e.dead || !overlap(p, e) || p._hit && p._hit.has(e.id)) continue;
+        p._hit = p._hit || new Set(); p._hit.add(e.id);
+        damageEnemy(e, p.damage, { crit: p.crit, color: p.color, dir: Math.sign(p.vx), burn: p.burn ? { duration: 3, dps: Math.max(2, (stats.fireDamage + stats.attack * 0.12) * (1 + (stats.effects.burnDamagePct || 0) / 100)) } : null });
+        if (p.radius) explodeProjectile(p, false);
+        if (p.pierce > 0) p.pierce--; else { p.life = 0; break; }
+      }
+    }
+    for (const p of world.enemyProjectiles) {
+      p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      if (projectileHitsSolid(p)) { if (p.radius) explodeProjectile(p, true); p.life = 0; continue; }
+      if (overlap(p, player)) { if (p.radius) explodeProjectile(p, true); else hurtPlayer(p.damage, p); p.life = 0; }
+    }
+    world.projectiles = world.projectiles.filter(p => p.life > 0 && p.x > world.cameraX - 100 && p.x < world.cameraX + VIEW_W + 100);
+    world.enemyProjectiles = world.enemyProjectiles.filter(p => p.life > 0 && p.x > world.cameraX - 150 && p.x < world.cameraX + VIEW_W + 150);
+  }
+
+  function updateDrops(dt) {
+    for (const d of world.drops) {
+      if (d.picked) continue;
+      d.life -= dt; d.vy += 900 * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.vx *= Math.pow(0.1, dt);
+      if (d.y + d.h >= GROUND_Y && groundExistsAt(centerX(d))) { d.y = GROUND_Y - d.h; d.vy = 0; }
+    }
+    world.drops = world.drops.filter(d => !d.picked && d.life > 0);
+  }
+
+  function updateEnvironment(dt) {
+    const mechanic = world.stage.mechanic;
+    if (mechanic === 'cold') {
+      const nearFire = world.braziers.some(b => Math.hypot(centerX(player) - centerX(b), centerY(player) - centerY(b)) < 125);
+      world.cold = clamp(world.cold + (nearFire ? -23 : 5.2) * dt, 0, 100);
+      if (world.cold >= 100) {
+        world._coldTick = (world._coldTick || 0) - dt;
+        if (world._coldTick <= 0) { world._coldTick = 1; hurtPlayer(10 + world.stage.level, null); }
+      }
+    } else if (mechanic === 'lava') {
+      world.lavaWave += dt;
+      const cycle = world.lavaWave % 16;
+      world.lavaWarning = cycle > 11 ? (cycle - 11) / 5 : 0;
+      if (cycle > 15.15) {
+        const safe = player.y + player.h < GROUND_Y - 45;
+        if (!safe && !world._waveHit) { world._waveHit = true; hurtPlayer(24 + world.stage.level * 2, null); toast('용암 파동! 높은 지대로 피하십시오.', '#ff6b35'); }
+      } else if (cycle < 1) world._waveHit = false;
+    }
+  }
+
+  function updateFx(dt) {
