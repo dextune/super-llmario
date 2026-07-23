@@ -1,0 +1,199 @@
+    if (profile.inventory.length >= INVENTORY_CAP) return { ok: false, reason: 'inventory-full' };
+    profile.equipment[slot] = null;
+    profile.inventory.push(item);
+    return { ok: true, item };
+  }
+
+  function sellItem(profile, inventoryIndex) {
+    const item = profile.inventory[inventoryIndex];
+    if (!item) return { ok: false, reason: 'missing-item' };
+    const gold = Math.max(1, Math.floor(item.value * 0.55));
+    profile.inventory.splice(inventoryIndex, 1);
+    profile.gold += gold;
+    return { ok: true, gold };
+  }
+
+  function salvageYield(item) {
+    const base = { common: 1, magic: 2, rare: 4, epic: 7, unique: 12 }[item.rarity] || 1;
+    return base + Math.floor((item.upgrade || 0) / 2);
+  }
+
+  function salvageItem(profile, inventoryIndex) {
+    const item = profile.inventory[inventoryIndex];
+    if (!item) return { ok: false, reason: 'missing-item' };
+    const materials = salvageYield(item);
+    profile.inventory.splice(inventoryIndex, 1);
+    profile.materials += materials;
+    return { ok: true, materials };
+  }
+
+  function upgradeCost(item) {
+    const rank = item.upgrade || 0;
+    return { gold: 75 + item.level * 22 + rank * 105, materials: 2 + rank * 2 };
+  }
+
+  function upgradeItem(profile, item) {
+    if (!item) return { ok: false, reason: 'missing-item' };
+    if ((item.upgrade || 0) >= MAX_UPGRADE) return { ok: false, reason: 'max-upgrade' };
+    const cost = upgradeCost(item);
+    if (profile.gold < cost.gold) return { ok: false, reason: 'gold', cost };
+    if (profile.materials < cost.materials) return { ok: false, reason: 'materials', cost };
+    profile.gold -= cost.gold;
+    profile.materials -= cost.materials;
+    item.upgrade = (item.upgrade || 0) + 1;
+    for (const key of Object.keys(item.stats)) {
+      const value = item.stats[key];
+      if (typeof value === 'number' && value > 0) item.stats[key] = Number((value * 1.1 + (key === 'attack' || key === 'armor' ? 1 : 0)).toFixed(1));
+    }
+    item.value = Math.round(item.value * 1.16);
+    profile.counters.upgrades++;
+    recordQuestEvent(profile, 'upgrade', 1);
+    return { ok: true, cost, rank: item.upgrade };
+  }
+
+  function rerollCost(item) {
+    return { gold: 90 + item.level * 28 + (item.affixes ? item.affixes.length : 0) * 35, materials: 3 };
+  }
+
+  function rerollItem(profile, item, rng) {
+    rng = normalizeRng(rng);
+    if (!item || item.rarity === 'common' || item.rarity === 'unique' || !item.affixes || !item.affixes.length) return { ok: false, reason: 'not-rerollable' };
+    const cost = rerollCost(item);
+    if (profile.gold < cost.gold || profile.materials < cost.materials) return { ok: false, reason: 'cost', cost };
+    const old = item.affixes[item.affixes.length - 1];
+    item.stats[old.stat] = (item.stats[old.stat] || 0) - old.value;
+    if (Math.abs(item.stats[old.stat]) < 0.001) delete item.stats[old.stat];
+    const used = new Set(item.affixes.slice(0, -1).map(a => a.id));
+    const pool = AFFIXES.filter(a => a.slots.includes(item.slot) && !used.has(a.id));
+    const next = rng.pick(pool);
+    const value = affixValue(next, item.level, rng);
+    item.affixes[item.affixes.length - 1] = { id: next.id, name: next.name, stat: next.stat, value };
+    item.name = (item.affixes[0] ? item.affixes[0].name + ' ' : '') + (item.baseName || item.name);
+    item.stats[next.stat] = (item.stats[next.stat] || 0) + value;
+    profile.gold -= cost.gold;
+    profile.materials -= cost.materials;
+    return { ok: true, cost, affix: item.affixes[item.affixes.length - 1] };
+  }
+
+  function shopRefreshCost(profile) {
+    return 35 + profile.shopRefreshes * 20;
+  }
+
+  function getShopStock(profile) {
+    const rng = makeRng((profile.shopSeed + profile.shopRefreshes * 7919 + profile.level * 131) >>> 0);
+    const stock = [];
+    for (let i = 0; i < 6; i++) {
+      const item = createItem(Math.max(1, profile.level + rng.int(-1, 2)), rng, { luck: 7 });
+      stock.push({ id: 'shop-' + profile.shopRefreshes + '-' + i, kind: 'gear', item, price: Math.round(item.value * 1.35) });
+    }
+    for (const entry of stock) entry.sold = !!(profile.shopPurchased && profile.shopPurchased[entry.id]);
+    stock.push({ id: 'shop-hp', kind: 'hp', name: '체력 물약', qty: 1, price: 45 + profile.level * 5 });
+    stock.push({ id: 'shop-mp', kind: 'mp', name: '마나 물약', qty: 1, price: 40 + profile.level * 4 });
+    return stock;
+  }
+
+  function refreshShop(profile) {
+    const cost = shopRefreshCost(profile);
+    if (profile.gold < cost) return { ok: false, reason: 'gold', cost };
+    profile.gold -= cost;
+    profile.shopRefreshes++;
+    return { ok: true, cost, stock: getShopStock(profile) };
+  }
+
+  function buyShopEntry(profile, entry) {
+    if (!entry) return { ok: false, reason: 'missing-entry' };
+    if (profile.gold < entry.price) return { ok: false, reason: 'gold' };
+    if (entry.kind === 'gear' && (entry.sold || (profile.shopPurchased && profile.shopPurchased[entry.id]))) return { ok: false, reason: 'sold' };
+    if (entry.kind === 'gear') {
+      if (profile.inventory.length >= INVENTORY_CAP) return { ok: false, reason: 'inventory-full' };
+      profile.inventory.push(deepClone(entry.item));
+      profile.shopPurchased = profile.shopPurchased || {};
+      profile.shopPurchased[entry.id] = true;
+      entry.sold = true;
+    } else if (entry.kind === 'hp' || entry.kind === 'mp') {
+      profile.potions[entry.kind] += entry.qty || 1;
+    } else return { ok: false, reason: 'unknown-entry' };
+    profile.gold -= entry.price;
+    return { ok: true, entry };
+  }
+
+  function recordQuestEvent(profile, event, amount) {
+    const changed = [];
+    const n = Math.max(0, amount == null ? 1 : amount);
+    for (const quest of QUESTS) {
+      if (quest.event !== event) continue;
+      const state = profile.quests[quest.id] || (profile.quests[quest.id] = { progress: 0, complete: false, claimed: false });
+      if (state.claimed) continue;
+      const before = state.progress;
+      state.progress = clamp(state.progress + n, 0, quest.target);
+      state.complete = state.progress >= quest.target;
+      if (state.progress !== before) changed.push(quest.id);
+    }
+    return changed;
+  }
+
+  function claimQuest(profile, questId, rng) {
+    const quest = QUESTS.find(q => q.id === questId);
+    const state = profile.quests[questId];
+    if (!quest || !state) return { ok: false, reason: 'missing-quest' };
+    if (!state.complete) return { ok: false, reason: 'incomplete' };
+    if (state.claimed) return { ok: false, reason: 'claimed' };
+    const reward = quest.reward;
+    profile.gold += reward.gold || 0;
+    profile.materials += reward.materials || 0;
+    profile.skillPoints += reward.skillPoints || 0;
+    let item = null;
+    if (reward.unique && profile.inventory.length >= INVENTORY_CAP) return { ok: false, reason: 'inventory-full' };
+    if (reward.unique) {
+      item = createItem(Math.max(10, profile.level), rng || makeRng(profile.id + questId), { rarity: 'unique' });
+      profile.inventory.push(item);
+    }
+    state.claimed = true;
+    return { ok: true, reward: deepClone(reward), item };
+  }
+
+  function completeStage(profile, stageIndex, result, rng) {
+    const stage = STAGES[stageIndex];
+    if (!stage) return { ok: false, reason: 'missing-stage' };
+    const r = Object.assign({ elapsed: stage.timeLimit, deaths: 0, objective: true, chests: 0, kills: 0, elites: 0, boss: false }, result || {});
+    const base = stage.reward;
+    let stars = 1;
+    if (r.objective) stars++;
+    if (r.elapsed <= stage.parTime && r.deaths === 0) stars++;
+    const bonus = 1 + Math.max(0, stars - 1) * 0.18;
+    const rewards = {
+      gold: Math.round(base.gold * bonus),
+      xp: Math.round(base.xp * bonus),
+      materials: base.materials + Math.max(0, stars - 1),
+      item: createItem(stage.level + 1, rng || makeRng(profile.id + ':' + stage.id + ':' + Date.now()), { rarity: stars === 3 ? 'epic' : (stars === 2 ? 'rare' : undefined), luck: stars * 5 }),
+    };
+    profile.gold += rewards.gold;
+    profile.materials += rewards.materials;
+    const levelUps = awardXP(profile, rewards.xp);
+    if (profile.inventory.length < INVENTORY_CAP) profile.inventory.push(rewards.item);
+    else rewards.item = null;
+    if (!profile.clearedStages.includes(stageIndex)) profile.clearedStages.push(stageIndex);
+    profile.unlockedStage = Math.max(profile.unlockedStage, Math.min(STAGES.length - 1, stageIndex + 1));
+    const currentBest = profile.stageBest[stage.id];
+    if (!currentBest || stars > currentBest.stars || (stars === currentBest.stars && r.elapsed < currentBest.time)) {
+      profile.stageBest[stage.id] = { stars, time: Number(r.elapsed.toFixed(1)), deaths: r.deaths };
+    }
+    profile.counters.stages++;
+    profile.counters.kills += r.kills || 0;
+    profile.counters.chests += r.chests || 0;
+    profile.counters.elites += r.elites || 0;
+    if (r.boss) profile.counters.bosses++;
+    recordQuestEvent(profile, 'kill', r.kills || 0);
+    recordQuestEvent(profile, 'chest', r.chests || 0);
+    recordQuestEvent(profile, 'elite', r.elites || 0);
+    if (r.deaths === 0) { profile.counters.noDeathClears++; recordQuestEvent(profile, 'nodeathClear', 1); }
+    if (r.boss) recordQuestEvent(profile, 'boss', 1);
+    if (stageIndex === STAGES.length - 1 && r.boss) profile.won = true;
+    return { ok: true, stage, stars, rewards, levelUps };
+  }
+
+  function registerDeath(profile) {
+    profile.deaths++;
+    const lost = Math.floor(profile.gold * 0.1);
+    profile.gold -= lost;
+    return lost;

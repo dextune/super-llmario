@@ -1,0 +1,175 @@
+        return '<div class="shop-entry">' + itemCard(entry.item, {}) + '<button data-action="buy-shop" data-index="' + i + '" ' + (entry.sold ? 'disabled' : '') + '>' + (entry.sold ? '판매 완료' : '구매 ' + fmt(entry.price) + 'G') + '</button></div>';
+      }
+      return '<div class="shop-entry consumable"><strong>' + esc(entry.name) + '</strong><span>보유 ' + profile.potions[entry.kind] + '개</span><button data-action="buy-shop" data-index="' + i + '">구매 ' + fmt(entry.price) + 'G</button></div>';
+    }).join('');
+    const refresh = $('btn-shop-refresh');
+    if (refresh) refresh.textContent = '상품 교체 · ' + fmt(RPG.shopRefreshCost(profile)) + 'G';
+  }
+
+  function openShop() {
+    setState(STATE.SHOP, 'shop');
+    renderShop();
+  }
+
+  function findForgeItem(key) {
+    if (!key) return null;
+    const [where, id] = key.split(':');
+    if (where === 'eq') return profile.equipment[id] || null;
+    if (where === 'bag') return profile.inventory[Number(id)] || null;
+    return null;
+  }
+
+  function renderForge() {
+    if (!profile) return;
+    const wallet = $('forge-wallet');
+    if (wallet) wallet.textContent = fmt(profile.gold) + 'G · 재료 ' + fmt(profile.materials);
+    const all = [];
+    for (const slot of RPG.SLOTS) if (profile.equipment[slot]) all.push({ key: 'eq:' + slot, item: profile.equipment[slot] });
+    profile.inventory.forEach((item, i) => all.push({ key: 'bag:' + i, item }));
+    if (!forgeSelection || !findForgeItem(forgeSelection)) forgeSelection = all.length ? all[0].key : null;
+    const host = $('forge-items');
+    if (host) host.innerHTML = all.map(entry => itemCard(entry.item, { action: 'forge-select', index: entry.key, selected: entry.key === forgeSelection })).join('');
+    const detail = $('forge-detail');
+    const item = findForgeItem(forgeSelection);
+    if (detail) {
+      if (!item) detail.innerHTML = '<p class="rpg-dim">강화할 장비가 없습니다.</p>';
+      else {
+        const up = RPG.upgradeCost(item), rr = RPG.rerollCost(item);
+        detail.innerHTML = '<h3 style="color:' + RPG.RARITIES[item.rarity].color + '">' + esc(item.name) + (item.upgrade ? ' +' + item.upgrade : '') + '</h3>' +
+          '<p>' + itemStatsHtml(item) + '</p>' +
+          '<button data-action="forge-upgrade">강화 · ' + fmt(up.gold) + 'G / 재료 ' + up.materials + '</button>' +
+          '<button data-action="forge-reroll" ' + ((!item.affixes || !item.affixes.length || item.rarity === 'unique') ? 'disabled' : '') + '>마지막 옵션 재련 · ' + fmt(rr.gold) + 'G / 재료 ' + rr.materials + '</button>';
+      }
+    }
+  }
+
+  function openForge() {
+    forgeSelection = null;
+    setState(STATE.FORGE, 'forge');
+    renderForge();
+  }
+
+  function renderSkills() {
+    if (!profile) return;
+    const cls = RPG.CLASS_DEFS[profile.classId];
+    const points = $('skill-points');
+    if (points) points.textContent = '스킬 포인트 ' + profile.skillPoints;
+    const host = $('skill-tree');
+    if (host) host.innerHTML = RPG.SKILL_TREES[profile.classId].map(node => {
+      const rank = profile.skills[node.id] || 0;
+      const check = RPG.canBuySkill(profile, node.id);
+      const req = node.requires ? '선행 ' + node.requires[0] + ' ' + node.requires[1] + '랭크' : '선행 없음';
+      return '<button class="skill-node" data-action="buy-skill" data-skill="' + node.id + '" ' + (!check.ok ? 'disabled' : '') + '>' +
+        '<strong>' + esc(node.name) + ' <b>' + rank + '/' + node.max + '</b></strong><span>' + esc(node.description) + '</span><small>' + esc(req) + ' · 비용 ' + node.cost + '</small></button>';
+    }).join('');
+    const abilityHost = $('ability-summary');
+    if (abilityHost) abilityHost.innerHTML = RPG.abilityNumbers(profile).map(a => '<span><kbd>' + a.hint + '</kbd> ' + esc(a.name) + ' · MP ' + a.cost + ' · ' + a.cooldown + '초</span>').join('');
+    const clsTitle = $('skill-class');
+    if (clsTitle) clsTitle.textContent = cls.icon + ' ' + cls.name;
+  }
+
+  function openSkills() {
+    setState(STATE.SKILLS, 'skills');
+    renderSkills();
+  }
+
+  function renderQuests() {
+    if (!profile) return;
+    const host = $('quest-list');
+    if (!host) return;
+    host.innerHTML = RPG.QUESTS.map(q => {
+      const qs = profile.quests[q.id];
+      const reward = [];
+      if (q.reward.gold) reward.push(q.reward.gold + 'G');
+      if (q.reward.materials) reward.push('재료 ' + q.reward.materials);
+      if (q.reward.skillPoints) reward.push('스킬포인트 ' + q.reward.skillPoints);
+      if (q.reward.unique) reward.push('유일 장비');
+      const status = qs.claimed ? '완료' : qs.complete ? '보상 수령' : qs.progress + '/' + q.target;
+      return '<div class="quest-entry ' + (qs.complete ? 'complete' : '') + '"><div><strong>' + esc(q.name) + '</strong><span>' + esc(q.description) + '</span><small>보상 · ' + esc(reward.join(' · ')) + '</small></div>' +
+        '<button data-action="claim-quest" data-quest="' + q.id + '" ' + (!qs.complete || qs.claimed ? 'disabled' : '') + '>' + status + '</button></div>';
+    }).join('');
+  }
+
+  function openQuests() {
+    setState(STATE.QUESTS, 'quests');
+    renderQuests();
+  }
+
+  function renderInventory() {
+    if (!profile) return;
+    stats = RPG.deriveStats(profile);
+    const summary = $('inventory-summary');
+    if (summary) summary.innerHTML = statSummary() + '<br>스탯 포인트 ' + profile.statPoints +
+      '<div class="stat-alloc"><button data-action="alloc-stat" data-stat="might">완력 +</button><button data-action="alloc-stat" data-stat="vitality">활력 +</button><button data-action="alloc-stat" data-stat="focus">집중 +</button><button data-action="alloc-stat" data-stat="agility">기민 +</button></div>';
+    const eq = $('inventory-equipped');
+    if (eq) eq.innerHTML = RPG.SLOTS.map(slot => '<div class="equip-slot"><label>' + RPG.SLOT_NAMES[slot] + '</label>' + itemCard(profile.equipment[slot], { action: 'unequip', slot }) + '</div>').join('');
+    const bag = $('inventory-bag');
+    if (bag) {
+      bag.innerHTML = profile.inventory.length
+        ? profile.inventory.map((item, i) => itemCard(item, { action: 'inventory-select', index: i, selected: inventorySelection === i })).join('')
+        : '<p class="rpg-dim">가방이 비어 있습니다.</p>';
+    }
+    const detail = $('inventory-detail');
+    const selected = profile.inventory[inventorySelection];
+    if (detail) {
+      if (!selected) detail.innerHTML = '<p class="rpg-dim">가방의 아이템을 선택하십시오.</p>';
+      else {
+        const equipped = profile.equipment[selected.slot];
+        const diff = RPG.itemScore(selected, profile.classId) - RPG.itemScore(equipped, profile.classId);
+        detail.innerHTML = '<h3 style="color:' + RPG.RARITIES[selected.rarity].color + '">' + esc(selected.name) + '</h3><p>' + itemStatsHtml(selected) + '</p>' +
+          '<p>현재 장비 대비 <b class="' + (diff >= 0 ? 'good' : 'bad') + '">' + (diff >= 0 ? '+' : '') + diff.toFixed(1) + '</b></p>' +
+          '<div class="inventory-actions"><button data-action="equip-selected">착용</button><button data-action="sell-selected">판매 ' + Math.floor(selected.value * 0.55) + 'G</button><button data-action="salvage-selected">분해 재료 ' + RPG.salvageYield(selected) + '</button></div>';
+      }
+    }
+    const cap = $('inventory-cap');
+    if (cap) cap.textContent = profile.inventory.length + '/' + RPG.INVENTORY_CAP;
+  }
+
+  function openInventory(from) {
+    resumeState = from || state;
+    if (![STATE.FIELD, STATE.HUB].includes(resumeState)) resumeState = STATE.HUB;
+    inventorySelection = profile && profile.inventory.length ? 0 : null;
+    setState(STATE.INVENTORY, 'inventory');
+    try { if (resumeState === STATE.FIELD) Audio.musicStop(); } catch (_) {}
+    renderInventory();
+  }
+
+  function closeMetaPanel() {
+    if (resumeState === STATE.FIELD && world && player) {
+      setState(STATE.FIELD, null);
+      try { Audio.musicStart(world.stageIndex % 3); } catch (_) {}
+    } else enterHub();
+  }
+
+  function rarityColor(rarity) { return RPG.RARITIES[rarity] ? RPG.RARITIES[rarity].color : '#fff'; }
+
+  function makeEnemy(type, x, stageIndex, eliteId, rng) {
+    const def = RPG.ENEMIES[type];
+    const stage = RPG.STAGES[stageIndex];
+    const scale = 1 + stage.level * 0.17 + Math.max(0, profile.level - stage.level) * 0.025;
+    const e = {
+      id: 'enemy-' + rng.int(10000, 99999), type, def, role: def.role,
+      x, y: type === 'bat' ? GROUND_Y - 150 : GROUND_Y - (type === 'boss' ? 86 : 42),
+      w: type === 'boss' ? 82 : (type === 'charger' ? 48 : 38), h: type === 'boss' ? 86 : (type === 'bat' ? 30 : 42),
+      vx: 0, vy: 0, face: -1,
+      maxHp: Math.round(def.hp * scale), hp: Math.round(def.hp * scale),
+      damage: Math.round(def.damage * (1 + stage.level * 0.1)),
+      speed: def.speed, attackCd: rng.random() * 1.2, skillCd: rng.random() * 2,
+      state: 'idle', stateT: 0, aggro: false, dead: false, hitFlash: 0,
+      frozen: 0, burn: 0, burnDps: 0, eliteId: eliteId || null, elite: null,
+      bossPhase: 1, summonCount: 0, blinkCd: 4 + rng.random() * 2,
+    };
+    if (eliteId) {
+      const af = RPG.ELITE_AFFIXES[eliteId];
+      e.elite = af;
+      e.maxHp = Math.round(e.maxHp * af.hp); e.hp = e.maxHp;
+      e.damage = Math.round(e.damage * af.damage); e.speed *= af.speed;
+    }
+    return e;
+  }
+
+  function gapAt(worldObj, x) {
+    return worldObj.gaps.some(gap => x >= gap[0] && x <= gap[1]);
+  }
+
+  function buildWorld(stageIndex) {

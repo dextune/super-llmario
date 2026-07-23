@@ -1,0 +1,85 @@
+      { level: 12, name: '공허 반지', stats: { crit: 5, skillDamagePct: 8 } },
+    ],
+    amulet: [
+      { level: 2, name: '청동 목걸이', stats: { maxHp: 10, maxMp: 6 } },
+      { level: 7, name: '정령 목걸이', stats: { maxMp: 24, cooldownPct: -5 } },
+      { level: 12, name: '태양 목걸이', stats: { maxHp: 45, attackPct: 8 } },
+    ],
+  });
+
+  const AFFIXES = Object.freeze([
+    { id: 'power', name: '강력한', stat: 'attack', min: 2, max: 6, perLevel: 0.65, slots: ['weapon', 'ring', 'amulet'] },
+    { id: 'guard', name: '굳건한', stat: 'armor', min: 2, max: 5, perLevel: 0.45, slots: ['armor', 'helm', 'boots'] },
+    { id: 'life', name: '거인의', stat: 'maxHp', min: 8, max: 18, perLevel: 2.1, slots: SLOTS },
+    { id: 'mana', name: '비전의', stat: 'maxMp', min: 6, max: 15, perLevel: 1.7, slots: SLOTS },
+    { id: 'critical', name: '치명적인', stat: 'crit', min: 1, max: 3, perLevel: 0.12, slots: ['weapon', 'helm', 'ring', 'amulet'] },
+    { id: 'swift', name: '재빠른', stat: 'movePct', min: 1, max: 3, perLevel: 0.08, slots: ['boots', 'ring', 'amulet'] },
+    { id: 'ferocious', name: '맹렬한', stat: 'attackPct', min: 3, max: 7, perLevel: 0.25, slots: ['weapon', 'ring', 'amulet'] },
+    { id: 'arcane', name: '집중의', stat: 'skillDamagePct', min: 4, max: 9, perLevel: 0.3, slots: ['weapon', 'helm', 'ring', 'amulet'] },
+    { id: 'cooling', name: '신속한', stat: 'cooldownPct', min: -7, max: -3, perLevel: -0.08, slots: ['helm', 'boots', 'amulet'] },
+    { id: 'vampire', name: '흡혈의', stat: 'leech', min: 1, max: 3, perLevel: 0.08, slots: ['weapon', 'ring'] },
+    { id: 'fire', name: '작열하는', stat: 'fireDamage', min: 3, max: 8, perLevel: 0.7, slots: ['weapon', 'ring', 'amulet'] },
+    { id: 'frost', name: '서리의', stat: 'frostDamage', min: 3, max: 8, perLevel: 0.7, slots: ['weapon', 'ring', 'amulet'] },
+  ]);
+
+  const UNIQUE_ITEMS = Object.freeze([
+    { id: 'earthbreaker', name: '대지파괴자', slot: 'weapon', level: 6, stats: { attack: 23, primaryDamagePct: 28, primaryRangePct: 25 }, uniqueEffect: '강타 충격파가 두 번 발생합니다.' },
+    { id: 'phoenix', name: '불사조의 외투', slot: 'armor', level: 8, stats: { armor: 18, maxHp: 45, fireDamage: 14 }, uniqueEffect: '스테이지당 한 번 치명상을 견디고 생명 35%를 회복합니다.' },
+    { id: 'wintercrown', name: '겨울왕의 관', slot: 'helm', level: 8, stats: { armor: 8, maxMp: 42, frostDamage: 18 }, uniqueEffect: '빙결된 적에게 주는 피해가 30% 증가합니다.' },
+    { id: 'stormstep', name: '폭풍걸음', slot: 'boots', level: 7, stats: { armor: 5, movePct: 12, dodge: 8 }, uniqueEffect: '질주가 지나간 자리에 번개 흔적을 남깁니다.' },
+    { id: 'bloodmoon', name: '핏빛 달의 반지', slot: 'ring', level: 10, stats: { crit: 8, leech: 5, attackPct: 10 }, uniqueEffect: '치명타 처치 시 체력 물약을 얻을 확률이 있습니다.' },
+    { id: 'archon', name: '집정관의 눈', slot: 'amulet', level: 10, stats: { maxMp: 55, skillDamagePct: 18, cooldownPct: -10 }, uniqueEffect: '마나가 80% 이상일 때 스킬 피해가 20% 증가합니다.' },
+  ]);
+
+  const ENEMIES = Object.freeze({
+    crawler: { name: '굼바 약탈자', role: 'melee', hp: 30, damage: 7, speed: 1.25, xp: 12, gold: [4, 11], color: '#a76632' },
+    shield: { name: '등껍질 수호병', role: 'shield', hp: 55, damage: 9, speed: 0.85, xp: 20, gold: [7, 16], color: '#3fab56' },
+    bat: { name: '황혼 박쥐', role: 'flying', hp: 25, damage: 7, speed: 1.7, xp: 14, gold: [4, 12], color: '#6f5a9c' },
+    archer: { name: '해골 궁수', role: 'ranged', hp: 42, damage: 11, speed: 0.8, xp: 24, gold: [9, 20], color: '#ddd8c4' },
+    shaman: { name: '어둠 주술사', role: 'healer', hp: 48, damage: 8, speed: 0.72, xp: 30, gold: [12, 24], color: '#b85ed0' },
+    charger: { name: '뿔 돌진병', role: 'charger', hp: 70, damage: 16, speed: 1.0, xp: 38, gold: [14, 30], color: '#d47735' },
+    ice: { name: '빙하 설인', role: 'melee', hp: 82, damage: 15, speed: 0.9, xp: 44, gold: [18, 34], color: '#9bdcff' },
+    demon: { name: '용암 악마', role: 'ranged', hp: 92, damage: 18, speed: 1.05, xp: 52, gold: [20, 42], color: '#dc4438' },
+    summoner: { name: '균열 소환사', role: 'summoner', hp: 110, damage: 14, speed: 0.65, xp: 68, gold: [28, 55], color: '#7947c7' },
+    minion: { name: '균열 하수인', role: 'melee', hp: 22, damage: 6, speed: 1.55, xp: 5, gold: [1, 4], color: '#a65cff' },
+    boss: { name: '쿠파 대왕', role: 'boss', hp: 1050, damage: 26, speed: 0.8, xp: 650, gold: [420, 680], color: '#7a1812', boss: true },
+  });
+
+  const ELITE_AFFIXES = Object.freeze({
+    berserker: { name: '광폭', color: '#ff544a', hp: 1.15, damage: 1.45, speed: 1.25, description: '빠르고 강한 공격' },
+    fortified: { name: '요새', color: '#ffd86a', hp: 1.85, damage: 1.0, speed: 0.82, description: '높은 생명과 방어' },
+    vampiric: { name: '흡혈', color: '#df4f95', hp: 1.35, damage: 1.15, speed: 1.0, description: '가한 피해만큼 회복' },
+    frost: { name: '냉기 오라', color: '#6fd8ff', hp: 1.3, damage: 1.1, speed: 1.0, description: '주변 플레이어 둔화' },
+    explosive: { name: '폭발', color: '#ff9a3c', hp: 1.25, damage: 1.2, speed: 1.0, description: '사망 시 폭발' },
+    blink: { name: '점멸', color: '#bd7bff', hp: 1.2, damage: 1.15, speed: 1.1, description: '주기적으로 순간이동' },
+  });
+
+  const STAGES = Object.freeze([
+    { id: 'meadow', name: '1. 새벽 초원', subtitle: '부서진 길의 전초전', level: 1, width: 4300, timeLimit: 210, parTime: 150, reward: { gold: 180, xp: 85, materials: 2 }, pools: ['crawler', 'shield', 'bat'], objective: '적 8마리를 처치하고 관문에 도달', objectiveType: 'kills', objectiveTarget: 8, mechanic: 'tutorial', theme: { sky: '#4b91e8', far: '#87c9ff', ground: '#8d4f25', accent: '#52c96d' } },
+    { id: 'dusk', name: '2. 황혼 벌판', subtitle: '엘리트 추적', level: 3, width: 4700, timeLimit: 220, parTime: 160, reward: { gold: 260, xp: 145, materials: 3 }, pools: ['crawler', 'shield', 'bat', 'charger'], objective: '황혼의 엘리트를 처치하고 탈출', objectiveType: 'elite', objectiveTarget: 1, mechanic: 'eliteHunt', theme: { sky: '#6c376f', far: '#ed8a64', ground: '#764520', accent: '#ffbd68' } },
+    { id: 'cavern', name: '3. 메아리 동굴', subtitle: '봉인 열쇠', level: 5, width: 5000, timeLimit: 240, parTime: 175, reward: { gold: 340, xp: 230, materials: 4 }, pools: ['bat', 'archer', 'shaman', 'shield'], objective: '보물상자에서 봉인 열쇠를 찾아 관문 개방', objectiveType: 'key', objectiveTarget: 1, mechanic: 'keyDoor', theme: { sky: '#181327', far: '#3b2a45', ground: '#504047', accent: '#a97be8' } },
+    { id: 'tundra', name: '4. 백야 설원', subtitle: '혹한 생존', level: 7, width: 5100, timeLimit: 245, parTime: 180, reward: { gold: 430, xp: 320, materials: 5 }, pools: ['ice', 'archer', 'shaman', 'bat'], objective: '화톳불을 이용해 동상을 견디며 관문 도달', objectiveType: 'survive', objectiveTarget: 1, mechanic: 'cold', theme: { sky: '#a7cdec', far: '#e5f5ff', ground: '#9dbccf', accent: '#65d8ff' } },
+    { id: 'inferno', name: '5. 용암 균열', subtitle: '붕괴하는 지옥로', level: 9, width: 5400, timeLimit: 230, parTime: 165, reward: { gold: 560, xp: 430, materials: 7 }, pools: ['demon', 'charger', 'summoner', 'archer'], objective: '용암 파동을 피해 균열 핵 3개 파괴', objectiveType: 'cores', objectiveTarget: 3, mechanic: 'lava', theme: { sky: '#260b0b', far: '#8f2518', ground: '#4c2418', accent: '#ff6b2c' } },
+    { id: 'citadel', name: '6. 마왕성', subtitle: '쿠파 대왕 결전', level: 12, width: 5900, timeLimit: 360, parTime: 240, reward: { gold: 900, xp: 800, materials: 12 }, pools: ['demon', 'summoner', 'shaman', 'charger'], objective: '쿠파 대왕의 3개 전투 단계를 돌파', objectiveType: 'boss', objectiveTarget: 1, mechanic: 'boss', theme: { sky: '#090812', far: '#281b37', ground: '#392433', accent: '#e65cff' } },
+  ]);
+
+  const QUESTS = Object.freeze([
+    { id: 'first_blood', name: '현상금: 길 위의 위협', description: '적 20마리 처치', event: 'kill', target: 20, reward: { gold: 260, materials: 3 } },
+    { id: 'treasure', name: '잊힌 보물', description: '보물상자 5개 개방', event: 'chest', target: 5, reward: { gold: 320, materials: 5 } },
+    { id: 'elite', name: '강자의 증명', description: '엘리트 적 4마리 처치', event: 'elite', target: 4, reward: { gold: 480, skillPoints: 1 } },
+    { id: 'forge', name: '대장장이의 부탁', description: '장비를 3회 강화', event: 'upgrade', target: 3, reward: { gold: 360, materials: 8 } },
+    { id: 'survivor', name: '귀환 없는 승리', description: '사망 없이 스테이지 2회 완료', event: 'nodeathClear', target: 2, reward: { gold: 650, skillPoints: 1 } },
+    { id: 'king', name: '왕의 몰락', description: '쿠파 대왕 처치', event: 'boss', target: 1, reward: { gold: 1200, materials: 18, unique: true } },
+  ]);
+
+  function xpForLevel(level) {
+    return Math.floor(70 + 55 * Math.pow(level, 1.48));
+  }
+
+  function createQuestState() {
+    const result = {};
+    for (const q of QUESTS) result[q.id] = { progress: 0, complete: false, claimed: false };
+    return result;
+  }
+
+  function addStats(target, source, scale) {

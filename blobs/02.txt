@@ -1,0 +1,154 @@
+'use strict';
+
+/* SUPER QWEN RPG 2 — 순수 RPG 도메인 계층
+ * 브라우저/Node 양쪽에서 사용 가능하며 DOM, canvas, Audio에 의존하지 않는다.
+ */
+(function initRPG2(root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.RPG2 = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function buildRPG2() {
+  const SAVE_VERSION = 2;
+  const INVENTORY_CAP = 30;
+  const MAX_UPGRADE = 7;
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const deepClone = value => JSON.parse(JSON.stringify(value));
+
+  function hashString(value) {
+    let h = 2166136261 >>> 0;
+    const s = String(value);
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  function makeRng(seed) {
+    let state = (typeof seed === 'number' ? seed : hashString(seed || Date.now())) >>> 0;
+    if (!state) state = 0x9e3779b9;
+    return {
+      random() {
+        state ^= state << 13;
+        state ^= state >>> 17;
+        state ^= state << 5;
+        return (state >>> 0) / 4294967296;
+      },
+      int(min, max) {
+        return Math.floor(this.random() * (max - min + 1)) + min;
+      },
+      pick(list) {
+        return list[Math.floor(this.random() * list.length)];
+      },
+      get state() { return state >>> 0; },
+    };
+  }
+
+  function normalizeRng(rng) {
+    if (!rng) return { random: Math.random, int: (a, b) => Math.floor(Math.random() * (b - a + 1)) + a, pick: a => a[Math.floor(Math.random() * a.length)] };
+    if (typeof rng === 'function') return { random: rng, int: (a, b) => Math.floor(rng() * (b - a + 1)) + a, pick: a => a[Math.floor(rng() * a.length)] };
+    return rng;
+  }
+
+  const CLASS_DEFS = Object.freeze({
+    vanguard: Object.freeze({
+      id: 'vanguard', name: '선봉대', icon: '⚔', color: '#ff665e',
+      description: '높은 생명력과 근접 충격파로 전선을 밀어붙이는 전사입니다.',
+      base: { maxHp: 130, maxMp: 55, attack: 13, armor: 9, crit: 5, move: 4.15, skillPower: 1 },
+      growth: { maxHp: 18, maxMp: 4, attack: 2.3, armor: 1.4 },
+      abilities: [
+        { key: 'basic', name: '연속 베기', cost: 0, cooldown: 0, hint: 'J' },
+        { key: 'primary', name: '대지 강타', cost: 14, cooldown: 3.2, hint: 'K' },
+        { key: 'secondary', name: '철벽 태세', cost: 18, cooldown: 8.0, hint: 'L' },
+      ],
+    }),
+    arcanist: Object.freeze({
+      id: 'arcanist', name: '비전술사', icon: '✦', color: '#8d7bff',
+      description: '원거리 화염과 냉기 제어에 특화된 주문 사용자입니다.',
+      base: { maxHp: 86, maxMp: 125, attack: 11, armor: 3, crit: 7, move: 4.05, skillPower: 1.18 },
+      growth: { maxHp: 11, maxMp: 13, attack: 2.0, armor: 0.7 },
+      abilities: [
+        { key: 'basic', name: '비전탄', cost: 0, cooldown: 0, hint: 'J' },
+        { key: 'primary', name: '화염구', cost: 16, cooldown: 1.5, hint: 'K' },
+        { key: 'secondary', name: '서리 폭발', cost: 24, cooldown: 6.0, hint: 'L' },
+      ],
+    }),
+    ranger: Object.freeze({
+      id: 'ranger', name: '척후병', icon: '➹', color: '#63db83',
+      description: '기동성과 치명타, 다중 사격으로 전장을 빠르게 정리합니다.',
+      base: { maxHp: 102, maxMp: 82, attack: 12, armor: 5, crit: 11, move: 4.55, skillPower: 1.05 },
+      growth: { maxHp: 14, maxMp: 7, attack: 2.15, armor: 1.0 },
+      abilities: [
+        { key: 'basic', name: '쌍검 사격', cost: 0, cooldown: 0, hint: 'J' },
+        { key: 'primary', name: '다중 사격', cost: 15, cooldown: 2.2, hint: 'K' },
+        { key: 'secondary', name: '그림자 질주', cost: 12, cooldown: 5.0, hint: 'L' },
+      ],
+    }),
+  });
+
+  const SKILL_TREES = Object.freeze({
+    vanguard: Object.freeze([
+      { id: 'v_power', name: '완력 단련', max: 5, cost: 1, requires: null, description: '공격력 +6%/랭크', effect: { attackPct: 6 } },
+      { id: 'v_guard', name: '강철 피부', max: 5, cost: 1, requires: null, description: '방어 +8%, 최대 생명 +4%/랭크', effect: { armorPct: 8, maxHpPct: 4 } },
+      { id: 'v_slam', name: '균열 확장', max: 3, cost: 1, requires: ['v_power', 2], description: '대지 강타 범위 +18%, 피해 +15%/랭크', effect: { primaryRangePct: 18, primaryDamagePct: 15 } },
+      { id: 'v_fortress', name: '움직이는 요새', max: 3, cost: 1, requires: ['v_guard', 2], description: '철벽 피해 감소 +8%, 지속시간 +0.4초/랭크', effect: { guardReduction: 8, guardDuration: 0.4 } },
+      { id: 'v_execute', name: '처형자', max: 3, cost: 1, requires: ['v_slam', 2], description: '생명 30% 이하 적에게 피해 +12%/랭크', effect: { executePct: 12 } },
+      { id: 'v_avatar', name: '전쟁의 화신', max: 1, cost: 2, requires: ['v_fortress', 3], description: '강타로 적을 처치하면 재사용 대기시간이 초기화됩니다.', effect: { slamResetOnKill: 1 } },
+    ]),
+    arcanist: Object.freeze([
+      { id: 'a_focus', name: '비전 집중', max: 5, cost: 1, requires: null, description: '스킬 피해 +7%/랭크', effect: { skillDamagePct: 7 } },
+      { id: 'a_flow', name: '마력 순환', max: 5, cost: 1, requires: null, description: '최대 마나 +8%, 마나 회복 +10%/랭크', effect: { maxMpPct: 8, manaRegenPct: 10 } },
+      { id: 'a_split', name: '분열 화염', max: 3, cost: 1, requires: ['a_focus', 2], description: '화염구 추가 투사체 +1/랭크', effect: { fireballExtra: 1 } },
+      { id: 'a_deepfreeze', name: '심층 동결', max: 3, cost: 1, requires: ['a_flow', 2], description: '서리 폭발 빙결시간 +0.5초, 피해 +12%/랭크', effect: { freezeDuration: 0.5, secondaryDamagePct: 12 } },
+      { id: 'a_combust', name: '연쇄 연소', max: 3, cost: 1, requires: ['a_split', 2], description: '화상 피해 +20%, 처치 시 폭발 확률 +15%/랭크', effect: { burnDamagePct: 20, combustChance: 15 } },
+      { id: 'a_archmage', name: '대마도사', max: 1, cost: 2, requires: ['a_deepfreeze', 3], description: '스킬 마나 소모 -25%, 재사용 대기시간 -15%.', effect: { manaCostPct: -25, cooldownPct: -15 } },
+    ]),
+    ranger: Object.freeze([
+      { id: 'r_precision', name: '정밀 사격', max: 5, cost: 1, requires: null, description: '치명타 확률 +2%, 치명타 피해 +8%/랭크', effect: { crit: 2, critDamagePct: 8 } },
+      { id: 'r_wind', name: '순풍', max: 5, cost: 1, requires: null, description: '이동속도 +3%, 회피 +2%/랭크', effect: { movePct: 3, dodge: 2 } },
+      { id: 'r_fan', name: '화살비', max: 3, cost: 1, requires: ['r_precision', 2], description: '다중 사격 투사체 +1, 피해 +10%/랭크', effect: { multishotExtra: 1, primaryDamagePct: 10 } },
+      { id: 'r_afterimage', name: '잔상', max: 3, cost: 1, requires: ['r_wind', 2], description: '질주 무적시간 +0.15초, 재사용 대기시간 -8%/랭크', effect: { dashInvuln: 0.15, secondaryCooldownPct: -8 } },
+      { id: 'r_hunter', name: '거물 사냥꾼', max: 3, cost: 1, requires: ['r_fan', 2], description: '엘리트·보스 피해 +12%/랭크', effect: { bossDamagePct: 12 } },
+      { id: 'r_phantom', name: '환영 사수', max: 1, cost: 2, requires: ['r_afterimage', 3], description: '질주 후 다음 다중 사격이 마나를 소모하지 않습니다.', effect: { freeShotAfterDash: 1 } },
+    ]),
+  });
+
+  const RARITIES = Object.freeze({
+    common: { name: '일반', color: '#d9e0ef', weight: 54, affixes: 0, value: 1.0 },
+    magic: { name: '마법', color: '#6f9bff', weight: 27, affixes: 1, value: 1.5 },
+    rare: { name: '희귀', color: '#ffe066', weight: 13, affixes: 2, value: 2.4 },
+    epic: { name: '영웅', color: '#c06bff', weight: 5, affixes: 3, value: 3.8 },
+    unique: { name: '유일', color: '#ff9b3a', weight: 1, affixes: 4, value: 6.0 },
+  });
+
+  const SLOT_NAMES = Object.freeze({ weapon: '무기', armor: '갑옷', helm: '투구', boots: '장화', ring: '반지', amulet: '목걸이' });
+  const SLOTS = Object.freeze(Object.keys(SLOT_NAMES));
+
+  const ITEM_BASES = Object.freeze({
+    weapon: [
+      { level: 1, name: '낡은 검', stats: { attack: 5 } },
+      { level: 3, name: '강철 검', stats: { attack: 10 } },
+      { level: 6, name: '룬 도끼', stats: { attack: 17 } },
+      { level: 10, name: '용살검', stats: { attack: 27 } },
+      { level: 15, name: '별의 심판', stats: { attack: 42 } },
+    ],
+    armor: [
+      { level: 1, name: '가죽 갑옷', stats: { armor: 4, maxHp: 8 } },
+      { level: 4, name: '사슬 갑옷', stats: { armor: 9, maxHp: 18 } },
+      { level: 8, name: '기사 판금', stats: { armor: 16, maxHp: 32 } },
+      { level: 13, name: '용비늘 갑옷', stats: { armor: 25, maxHp: 52 } },
+    ],
+    helm: [
+      { level: 1, name: '여행자 모자', stats: { armor: 2, maxMp: 5 } },
+      { level: 5, name: '수호 투구', stats: { armor: 6, maxHp: 12 } },
+      { level: 10, name: '현자의 왕관', stats: { armor: 9, maxMp: 28 } },
+    ],
+    boots: [
+      { level: 1, name: '가죽 장화', stats: { armor: 1, movePct: 2 } },
+      { level: 5, name: '바람 장화', stats: { armor: 4, movePct: 5 } },
+      { level: 11, name: '차원 장화', stats: { armor: 7, movePct: 9 } },
+    ],
+    ring: [
+      { level: 2, name: '구리 반지', stats: { crit: 1 } },
+      { level: 6, name: '루비 반지', stats: { attackPct: 5 } },

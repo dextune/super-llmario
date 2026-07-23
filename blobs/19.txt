@@ -1,0 +1,15 @@
+{
+  "name": "super-qwen-rpg-2",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Browser action RPG with town, quests, loot, skill trees and six campaign regions",
+  "scripts": {
+    "assemble": "node scripts/assemble-sources.js",
+    "test": "node tests/rpg2-core.test.js && node tests/rpg2-smoke.test.js",
+    "check": "node scripts/assemble-sources.js --check && npm test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,103 @@
+  }
+
+  function abilityNumbers(profile) {
+    const cls = CLASS_DEFS[profile.classId];
+    const stats = deriveStats(profile);
+    const fx = stats.effects || {};
+    return cls.abilities.map((ability, i) => {
+      const cooldownKey = i === 2 ? 'secondaryCooldownPct' : 'cooldownPct';
+      const cdPct = (stats.cooldownPct || 0) + (fx[cooldownKey] || 0);
+      return Object.assign({}, ability, {
+        cost: Math.max(0, Math.round(ability.cost * stats.manaCostMult)),
+        cooldown: Number((ability.cooldown * clamp(1 + cdPct / 100, 0.4, 1.5)).toFixed(2)),
+      });
+    });
+  }
+
+  function itemScore(item, classId) {
+    if (!item) return 0;
+    const weights = classId === 'arcanist'
+      ? { attack: 1.2, armor: 1.1, maxHp: 0.12, maxMp: 0.2, crit: 2.8, skillDamagePct: 3.2, cooldownPct: -2.4, fireDamage: 1.7, frostDamage: 1.7, movePct: 1.4 }
+      : classId === 'ranger'
+        ? { attack: 1.6, armor: 1.2, maxHp: 0.14, maxMp: 0.12, crit: 3.4, skillDamagePct: 2.0, cooldownPct: -2.0, movePct: 2.3, dodge: 2.5, leech: 3 }
+        : { attack: 1.7, armor: 1.8, maxHp: 0.18, maxMp: 0.08, crit: 2.2, skillDamagePct: 1.7, cooldownPct: -1.8, movePct: 1.2, leech: 3.2 };
+    let score = 0;
+    for (const [key, value] of Object.entries(item.stats || {})) score += (weights[key] || 0.8) * value;
+    return Number(score.toFixed(1));
+  }
+
+  function sanitizeItem(item) {
+    if (!item || typeof item !== 'object' || !SLOTS.includes(item.slot)) return null;
+    const out = deepClone(item);
+    out.id = String(out.id || ('restored-' + hashString(JSON.stringify(out))));
+    out.name = String(out.name || SLOT_NAMES[out.slot]);
+    out.baseName = String(out.baseName || out.name);
+    out.rarity = RARITIES[out.rarity] ? out.rarity : 'common';
+    out.level = clamp(Number(out.level) || 1, 1, 99);
+    out.upgrade = clamp(Number(out.upgrade) || 0, 0, MAX_UPGRADE);
+    out.stats = out.stats && typeof out.stats === 'object' ? out.stats : {};
+    out.affixes = Array.isArray(out.affixes) ? out.affixes : [];
+    out.value = Math.max(1, Number(out.value) || 1);
+    return out;
+  }
+
+  function sanitizeProfile(raw) {
+    if (!raw || typeof raw !== 'object' || !CLASS_DEFS[raw.classId]) return null;
+    const base = createProfile(raw.classId, raw.createdAt || Date.now());
+    const profile = Object.assign(base, deepClone(raw));
+    profile.version = SAVE_VERSION;
+    profile.level = clamp(Number(profile.level) || 1, 1, 99);
+    profile.xp = Math.max(0, Number(profile.xp) || 0);
+    profile.gold = Math.max(0, Math.floor(Number(profile.gold) || 0));
+    profile.materials = Math.max(0, Math.floor(Number(profile.materials) || 0));
+    profile.skillPoints = Math.max(0, Math.floor(Number(profile.skillPoints) || 0));
+    profile.statPoints = Math.max(0, Math.floor(Number(profile.statPoints) || 0));
+    profile.alloc = Object.assign({ might: 0, vitality: 0, focus: 0, agility: 0 }, profile.alloc || {});
+    profile.skills = profile.skills && typeof profile.skills === 'object' ? profile.skills : {};
+    profile.inventory = (Array.isArray(profile.inventory) ? profile.inventory : []).map(sanitizeItem).filter(Boolean).slice(0, INVENTORY_CAP);
+    profile.equipment = profile.equipment && typeof profile.equipment === 'object' ? profile.equipment : {};
+    for (const slot of SLOTS) profile.equipment[slot] = sanitizeItem(profile.equipment[slot]);
+    profile.potions = Object.assign({ hp: 0, mp: 0 }, profile.potions || {});
+    profile.unlockedStage = clamp(Number(profile.unlockedStage) || 0, 0, STAGES.length - 1);
+    profile.clearedStages = Array.isArray(profile.clearedStages) ? profile.clearedStages.filter(n => Number.isInteger(n) && n >= 0 && n < STAGES.length) : [];
+    profile.stageBest = profile.stageBest && typeof profile.stageBest === 'object' ? profile.stageBest : {};
+    profile.quests = Object.assign(createQuestState(), profile.quests || {});
+    profile.counters = Object.assign({ kills: 0, chests: 0, elites: 0, bosses: 0, upgrades: 0, stages: 0, noDeathClears: 0 }, profile.counters || {});
+    profile.shopPurchased = profile.shopPurchased && typeof profile.shopPurchased === 'object' ? profile.shopPurchased : {};
+    profile.settings = Object.assign({ sound: true }, profile.settings || {});
+    return profile;
+  }
+
+  function serializeProfile(profile, now) {
+    const clean = sanitizeProfile(profile);
+    if (!clean) throw new Error('저장할 프로필이 올바르지 않습니다.');
+    clean.lastSavedAt = Number(now || Date.now());
+    return JSON.stringify({ version: SAVE_VERSION, savedAt: clean.lastSavedAt, profile: clean });
+  }
+
+  function parseProfile(text) {
+    try {
+      const data = typeof text === 'string' ? JSON.parse(text) : text;
+      if (!data || Number(data.version) !== SAVE_VERSION) return { ok: false, reason: 'version' };
+      const profile = sanitizeProfile(data.profile);
+      if (!profile) return { ok: false, reason: 'profile' };
+      return { ok: true, profile, savedAt: Number(data.savedAt) || 0 };
+    } catch (error) {
+      return { ok: false, reason: 'parse', error };
+    }
+  }
+
+  return Object.freeze({
+    SAVE_VERSION, INVENTORY_CAP, MAX_UPGRADE,
+    CLASS_DEFS, SKILL_TREES, RARITIES, SLOT_NAMES, SLOTS,
+    ITEM_BASES, AFFIXES, UNIQUE_ITEMS, ENEMIES, ELITE_AFFIXES, STAGES, QUESTS,
+    clamp, deepClone, hashString, makeRng, xpForLevel,
+    createProfile, sanitizeProfile, serializeProfile, parseProfile,
+    deriveStats, skillEffects, abilityNumbers, awardXP, allocateStat,
+    canBuySkill, buySkill, createItem, rollRarity, itemScore,
+    equipItem, unequipItem, sellItem, salvageItem, salvageYield,
+    upgradeCost, upgradeItem, rerollCost, rerollItem,
+    shopRefreshCost, getShopStock, refreshShop, buyShopEntry,
+    recordQuestEvent, claimQuest, completeStage, registerDeath,
+  });
+});
