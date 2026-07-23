@@ -5,11 +5,11 @@ const vm = require('vm');
 const { assembleEntry, verifyAll } = require('../scripts/assemble-sources');
 
 function loadCore() {
-  const { source } = assembleEntry('rpg2-core.js');
+  const { source } = assembleEntry('ms-core.js');
   const sandbox = { module: { exports: {} }, exports: {}, console };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
-  new vm.Script(source, { filename: 'rpg2-core.js' }).runInContext(sandbox);
+  new vm.Script(source, { filename: 'ms-core.js' }).runInContext(sandbox);
   return sandbox.module.exports;
 }
 
@@ -31,247 +31,141 @@ function run() {
   console.log(`CORE_TESTS_PASS ${passed}/${tests.length}`);
 }
 
-const RPG = loadCore();
+const MS = loadCore();
 
 test('source manifest integrity and JavaScript compilation', () => {
   const verified = verifyAll();
-  assert.equal(verified['rpg2-core.js'].bytes, 43680);
-  assert.equal(verified['rpg2-game.js'].bytes, 80205);
+  assert.ok(verified['ms-core.js']);
+  assert.ok(verified['ms-game.js']);
+  assert.ok(verified['ms-core.js'].bytes > 0);
+  assert.ok(verified['ms-game.js'].bytes > 0);
 });
 
-test('three distinct classes and six-stage campaign are defined', () => {
-  assert.deepEqual(Object.keys(RPG.CLASS_DEFS), ['vanguard', 'arcanist', 'ranger']);
-  assert.equal(RPG.STAGES.length, 6);
-  for (const classId of Object.keys(RPG.CLASS_DEFS)) assert.equal(RPG.SKILL_TREES[classId].length, 6);
-  assert.equal(new Set(RPG.STAGES.map(stage => stage.mechanic)).size, 6);
+test('six weapons with distinct stats are defined', () => {
+  assert.equal(MS.WEAPON_KEYS.length, 6);
+  for (const key of MS.WEAPON_KEYS) {
+    const w = MS.WEAPONS[key];
+    assert.ok(w.name, key + ' has name');
+    assert.ok(w.letter, key + ' has letter');
+    assert.ok(w.fireRate > 0, key + ' has fireRate');
+    assert.ok(w.damage > 0, key + ' has damage');
+    assert.ok(w.kind, key + ' has kind');
+  }
+  assert.equal(MS.WEAPONS.pistol.ammo, Infinity);
+  assert.ok(MS.WEAPONS.hmg.ammo > 0 && MS.WEAPONS.hmg.ammo !== Infinity);
+  assert.ok(MS.WEAPONS.shotgun.pellets > 1);
+  assert.ok(MS.WEAPONS.rocket.radius > 0);
+  assert.equal(MS.WEAPONS.laser.piercing, true);
 });
 
-test('profile creation assigns starter equipment and class identity', () => {
-  for (const classId of Object.keys(RPG.CLASS_DEFS)) {
-    const profile = RPG.createProfile(classId, 1000);
-    assert.equal(profile.classId, classId);
-    assert.equal(profile.level, 1);
-    assert.equal(profile.gold, 320);
-    assert.equal(profile.inventory.length, 0);
-    assert.equal(profile.equipment.weapon.slot, 'weapon');
-    assert.match(profile.equipment.weapon.id, /^starter-/);
+test('five stages with distinct themes and spawns', () => {
+  assert.equal(MS.STAGES.length, 5);
+  for (const stage of MS.STAGES) {
+    assert.ok(stage.name, 'stage has name');
+    assert.ok(stage.subtitle, 'stage has subtitle');
+    assert.ok(stage.width > 1000, 'stage has width');
+    assert.ok(stage.timeLimit > 60, 'stage has timeLimit');
+    assert.ok(stage.theme, 'stage has theme');
+    assert.ok(stage.theme.sky, 'stage theme has sky color');
+    assert.ok(stage.theme.ground, 'stage theme has ground color');
+    assert.ok(stage.spawns.length > 0, 'stage has spawns');
+    assert.ok(stage.prisoners > 0, 'stage has prisoners');
+  }
+  const themes = new Set(MS.STAGES.map(s => s.theme.sky));
+  assert.ok(themes.size >= 4, 'stages have distinct themes');
+});
+
+test('enemy types with distinct roles', () => {
+  const types = Object.keys(MS.ENEMY_TYPES);
+  assert.ok(types.length >= 7, 'at least 7 enemy types');
+  for (const type of types) {
+    const e = MS.ENEMY_TYPES[type];
+    assert.ok(e.role, type + ' has role');
+    assert.ok(e.hp > 0, type + ' has hp');
+    assert.ok(e.damage > 0, type + ' has damage');
+    assert.ok(e.score > 0, type + ' has score');
+  }
+  assert.ok(MS.ENEMY_TYPES.grunt.role === 'walker');
+  assert.ok(MS.ENEMY_TYPES.turret.speed === 0, 'turret is stationary');
+  assert.ok(MS.ENEMY_TYPES.tank.miniboss === true, 'tank is miniboss');
+  assert.ok(MS.ENEMY_TYPES.chopper.flying === true, 'chopper is flying');
+});
+
+test('five bosses with multi-phase patterns', () => {
+  assert.equal(MS.BOSSES.length, 5);
+  for (const boss of MS.BOSSES) {
+    assert.ok(boss.name, 'boss has name');
+    assert.ok(boss.hp > 200, 'boss has substantial hp');
+    assert.ok(boss.phases.length >= 2, 'boss has at least 2 phases');
+    assert.ok(boss.score > 0, 'boss has score');
+    for (const phase of boss.phases) {
+      assert.ok(phase.pattern.length > 0, 'phase has patterns');
+    }
+  }
+  assert.equal(MS.BOSSES[0].stage, 0);
+  assert.equal(MS.BOSSES[4].stage, 4);
+});
+
+test('score calculation rewards kills, prisoners, and time', () => {
+  const highScore = MS.calcStageScore({
+    kills: 30, prisoners: 8, timeRemaining: 120, noHit: true, grenadesLeft: 5,
+  });
+  const lowScore = MS.calcStageScore({
+    kills: 5, prisoners: 0, timeRemaining: 0, noHit: false, grenadesLeft: 0,
+  });
+  assert.ok(highScore > lowScore * 5, 'good play scores much higher');
+  assert.ok(highScore > 15000, 'excellent run exceeds 15000');
+});
+
+test('score grades are ordered correctly', () => {
+  assert.equal(MS.scoreGrade(50000), 'S');
+  assert.equal(MS.scoreGrade(30000), 'A');
+  assert.equal(MS.scoreGrade(20000), 'B');
+  assert.equal(MS.scoreGrade(10000), 'C');
+  assert.equal(MS.scoreGrade(1000), 'D');
+});
+
+test('save system creates and validates saves', () => {
+  const save = MS.createSave();
+  assert.equal(save.unlockedStages, 1);
+  assert.equal(save.totalKills, 0);
+  assert.equal(Object.keys(save.highScores).length, 0);
+  assert.equal(Object.keys(save.bestGrade).length, 0);
+
+  const bad = MS.validateSave({ unlockedStages: 999, totalKills: -5 });
+  assert.equal(bad.unlockedStages, MS.TOTAL_STAGES);
+  assert.equal(bad.totalKills, 0);
+});
+
+test('recording stage results unlocks stages and tracks best scores', () => {
+  const save = MS.createSave();
+  MS.unlockNextStage(save, 0);
+  assert.equal(save.unlockedStages, 2);
+  assert.ok(MS.stageUnlocked(save, 1), 'stage 1 unlocked');
+
+  MS.recordStageResult(save, 0, 25000, 'A', 20, 6);
+  assert.equal(save.highScores['0'], 25000);
+  assert.equal(save.bestGrade['0'], 'A');
+  assert.equal(save.totalKills, 20);
+  assert.equal(save.totalPrisoners, 6);
+
+  MS.recordStageResult(save, 0, 15000, 'B', 10, 3);
+  assert.equal(save.highScores['0'], 25000, 'keeps best score');
+  assert.equal(save.bestGrade['0'], 'A', 'keeps best grade');
+});
+
+test('random weapon drop returns valid weapon', () => {
+  const rng = MS.makeRng(42);
+  for (let i = 0; i < 20; i++) {
+    const w = MS.randomWeaponDrop(rng);
+    assert.ok(MS.WEAPONS[w], 'drop is a valid weapon');
+    assert.notEqual(w, 'pistol', 'never drops pistol');
   }
 });
 
-test('derived stats preserve class roles', () => {
-  const v = RPG.deriveStats(RPG.createProfile('vanguard', 1));
-  const a = RPG.deriveStats(RPG.createProfile('arcanist', 2));
-  const r = RPG.deriveStats(RPG.createProfile('ranger', 3));
-  assert.ok(v.maxHp > r.maxHp && r.maxHp > a.maxHp);
-  assert.ok(a.maxMp > r.maxMp && r.maxMp > v.maxMp);
-  assert.ok(r.crit > a.crit && a.crit > v.crit);
-});
-
-test('experience awards levels, skill points, and stat points', () => {
-  const profile = RPG.createProfile('vanguard', 10);
-  const gain = RPG.xpForLevel(1) + RPG.xpForLevel(2) + 10;
-  const levels = RPG.awardXP(profile, gain);
-  assert.equal(levels, 2);
-  assert.equal(profile.level, 3);
-  assert.equal(profile.skillPoints, 4);
-  assert.equal(profile.statPoints, 6);
-  assert.equal(profile.xp, 10);
-});
-
-test('stat allocation consumes points and affects derived stats', () => {
-  const profile = RPG.createProfile('vanguard', 11);
-  profile.statPoints = 2;
-  const before = RPG.deriveStats(profile);
-  assert.equal(RPG.allocateStat(profile, 'vitality').ok, true);
-  assert.equal(RPG.allocateStat(profile, 'might').ok, true);
-  assert.equal(RPG.allocateStat(profile, 'focus').reason, 'no-points');
-  const after = RPG.deriveStats(profile);
-  assert.ok(after.maxHp > before.maxHp);
-  assert.ok(after.attack > before.attack);
-});
-
-test('skill prerequisites and rank caps are enforced', () => {
-  const profile = RPG.createProfile('vanguard', 12);
-  profile.skillPoints = 20;
-  assert.equal(RPG.canBuySkill(profile, 'v_slam').reason, 'prerequisite');
-  assert.equal(RPG.buySkill(profile, 'v_power').ok, true);
-  assert.equal(RPG.buySkill(profile, 'v_power').ok, true);
-  assert.equal(RPG.canBuySkill(profile, 'v_slam').ok, true);
-  assert.equal(RPG.buySkill(profile, 'v_slam').ok, true);
-  for (let i = 0; i < 3; i++) RPG.buySkill(profile, 'v_power');
-  assert.equal(profile.skills.v_power, 5);
-  assert.equal(RPG.buySkill(profile, 'v_power').reason, 'max-rank');
-  const stats = RPG.deriveStats(profile);
-  assert.ok(stats.attackPct >= 30);
-  assert.ok(stats.effects.primaryDamagePct >= 15);
-});
-
-test('seeded item generation is deterministic and schema-valid', () => {
-  const a = RPG.createItem(8, RPG.makeRng(12345), { rarity: 'rare', slot: 'weapon' });
-  const b = RPG.createItem(8, RPG.makeRng(12345), { rarity: 'rare', slot: 'weapon' });
-  assert.deepEqual(a, b);
-  assert.equal(a.slot, 'weapon');
-  assert.equal(a.rarity, 'rare');
-  assert.equal(a.affixes.length, 2);
-  assert.ok(a.value > 0);
-  assert.ok(RPG.itemScore(a, 'vanguard') > 0);
-});
-
-test('unique item generation changes combat behavior data', () => {
-  const item = RPG.createItem(12, RPG.makeRng(998), { rarity: 'unique' });
-  assert.equal(item.rarity, 'unique');
-  assert.ok(RPG.SLOTS.includes(item.slot));
-  assert.equal(typeof item.uniqueEffect, 'string');
-  assert.ok(item.uniqueEffect.length > 4);
-});
-
-test('equip and unequip preserve inventory items', () => {
-  const profile = RPG.createProfile('ranger', 13);
-  const item = RPG.createItem(6, RPG.makeRng(44), { rarity: 'rare', slot: 'weapon' });
-  profile.inventory.push(item);
-  const starter = profile.equipment.weapon;
-  const equipped = RPG.equipItem(profile, 0);
-  assert.equal(equipped.ok, true);
-  assert.equal(profile.equipment.weapon.id, item.id);
-  assert.ok(profile.inventory.some(entry => entry.id === starter.id));
-  const unequipped = RPG.unequipItem(profile, 'weapon');
-  assert.equal(unequipped.ok, true);
-  assert.equal(profile.equipment.weapon, null);
-  assert.ok(profile.inventory.some(entry => entry.id === item.id));
-});
-
-test('selling and salvaging create different economic outputs', () => {
-  const sellProfile = RPG.createProfile('vanguard', 14);
-  const sellItem = RPG.createItem(7, RPG.makeRng(51), { rarity: 'rare' });
-  sellProfile.inventory.push(sellItem);
-  const goldBefore = sellProfile.gold;
-  const sold = RPG.sellItem(sellProfile, 0);
-  assert.equal(sold.ok, true);
-  assert.equal(sellProfile.gold, goldBefore + sold.gold);
-
-  const salvageProfile = RPG.createProfile('vanguard', 15);
-  const salvageItem = RPG.createItem(7, RPG.makeRng(52), { rarity: 'epic' });
-  salvageProfile.inventory.push(salvageItem);
-  const materialBefore = salvageProfile.materials;
-  const salvaged = RPG.salvageItem(salvageProfile, 0);
-  assert.equal(salvaged.ok, true);
-  assert.ok(salvageProfile.materials > materialBefore);
-  assert.equal(salvaged.materials, RPG.salvageYield(salvageItem));
-});
-
-test('shop stock is deterministic and gear can only be purchased once', () => {
-  const profile = RPG.createProfile('arcanist', 16);
-  profile.gold = 100000;
-  const first = RPG.getShopStock(profile);
-  const second = RPG.getShopStock(profile);
-  assert.deepEqual(first, second);
-  assert.equal(first.length, 8);
-  const gear = first[0];
-  assert.equal(RPG.buyShopEntry(profile, gear).ok, true);
-  assert.equal(RPG.buyShopEntry(profile, gear).reason, 'sold');
-  const hpBefore = profile.potions.hp;
-  assert.equal(RPG.buyShopEntry(profile, first[6]).ok, true);
-  assert.equal(profile.potions.hp, hpBefore + 1);
-  const refreshesBefore = profile.shopRefreshes;
-  assert.equal(RPG.refreshShop(profile).ok, true);
-  assert.equal(profile.shopRefreshes, refreshesBefore + 1);
-});
-
-test('upgrade consumes resources, scales stats, and stops at +7', () => {
-  const profile = RPG.createProfile('vanguard', 17);
-  profile.gold = 1000000;
-  profile.materials = 10000;
-  const item = RPG.createItem(8, RPG.makeRng(61), { rarity: 'rare', slot: 'weapon' });
-  const attackBefore = item.stats.attack;
-  for (let rank = 1; rank <= RPG.MAX_UPGRADE; rank++) {
-    const result = RPG.upgradeItem(profile, item);
-    assert.equal(result.ok, true);
-    assert.equal(item.upgrade, rank);
-  }
-  assert.ok(item.stats.attack > attackBefore);
-  assert.equal(RPG.upgradeItem(profile, item).reason, 'max-upgrade');
-  assert.equal(profile.counters.upgrades, RPG.MAX_UPGRADE);
-  assert.ok(profile.quests.forge.progress >= 3);
-});
-
-test('reroll replaces an eligible affix and deducts exact cost', () => {
-  const profile = RPG.createProfile('arcanist', 18);
-  profile.gold = 100000;
-  profile.materials = 1000;
-  const item = RPG.createItem(9, RPG.makeRng(71), { rarity: 'rare', slot: 'amulet' });
-  const beforeGold = profile.gold;
-  const beforeMaterials = profile.materials;
-  const cost = RPG.rerollCost(item);
-  const result = RPG.rerollItem(profile, item, RPG.makeRng(72));
-  assert.equal(result.ok, true);
-  assert.equal(profile.gold, beforeGold - cost.gold);
-  assert.equal(profile.materials, beforeMaterials - cost.materials);
-  assert.equal(item.affixes.length, 2);
-  assert.ok(item.stats[result.affix.stat] !== undefined);
-});
-
-test('quest progress completes once and reward cannot be claimed twice', () => {
-  const profile = RPG.createProfile('ranger', 19);
-  RPG.recordQuestEvent(profile, 'kill', 20);
-  assert.equal(profile.quests.first_blood.complete, true);
-  const beforeGold = profile.gold;
-  const first = RPG.claimQuest(profile, 'first_blood', RPG.makeRng(80));
-  assert.equal(first.ok, true);
-  assert.ok(profile.gold > beforeGold);
-  assert.equal(RPG.claimQuest(profile, 'first_blood').reason, 'claimed');
-});
-
-test('stage completion awards stars, unlocks progression, and records best run', () => {
-  const profile = RPG.createProfile('vanguard', 20);
-  const result = RPG.completeStage(profile, 0, { elapsed: 100, deaths: 0, objective: true, kills: 9, chests: 2, elites: 1 }, RPG.makeRng(90));
-  assert.equal(result.ok, true);
-  assert.equal(result.stars, 3);
-  assert.equal(profile.unlockedStage, 1);
-  assert.ok(profile.clearedStages.includes(0));
-  assert.equal(profile.stageBest.meadow.stars, 3);
-  assert.equal(profile.counters.kills, 9);
-  assert.ok(profile.inventory.length >= 1);
-});
-
-test('completing the final boss marks the campaign won', () => {
-  const profile = RPG.createProfile('arcanist', 21);
-  profile.unlockedStage = 5;
-  const result = RPG.completeStage(profile, 5, { elapsed: 210, deaths: 0, objective: true, kills: 18, elites: 2, boss: true }, RPG.makeRng(91));
-  assert.equal(result.ok, true);
-  assert.equal(profile.won, true);
-  assert.equal(profile.quests.king.complete, true);
-});
-
-test('death removes ten percent of current gold', () => {
-  const profile = RPG.createProfile('ranger', 22);
-  profile.gold = 1234;
-  const lost = RPG.registerDeath(profile);
-  assert.equal(lost, 123);
-  assert.equal(profile.gold, 1111);
-  assert.equal(profile.deaths, 1);
-});
-
-test('versioned save round-trip preserves campaign state', () => {
-  const profile = RPG.createProfile('ranger', 23);
-  profile.level = 8;
-  profile.gold = 4321;
-  profile.inventory.push(RPG.createItem(8, RPG.makeRng(101), { rarity: 'epic' }));
-  profile.skills.r_precision = 3;
-  const text = RPG.serializeProfile(profile, 9999);
-  const parsed = RPG.parseProfile(text);
-  assert.equal(parsed.ok, true);
-  assert.equal(parsed.savedAt, 9999);
-  assert.equal(parsed.profile.classId, 'ranger');
-  assert.equal(parsed.profile.level, 8);
-  assert.equal(parsed.profile.gold, 4321);
-  assert.equal(parsed.profile.inventory.length, 1);
-  assert.equal(parsed.profile.skills.r_precision, 3);
-});
-
-test('invalid or incompatible save payloads are rejected', () => {
-  assert.equal(RPG.parseProfile('{bad json').reason, 'parse');
-  assert.equal(RPG.parseProfile(JSON.stringify({ version: 1, profile: {} })).reason, 'version');
-  assert.equal(RPG.parseProfile({ version: 2, profile: { classId: 'missing' } }).reason, 'profile');
+test('formatScore adds thousands separators', () => {
+  assert.equal(MS.formatScore(1234567), '1,234,567');
+  assert.equal(MS.formatScore(0), '0');
 });
 
 run();

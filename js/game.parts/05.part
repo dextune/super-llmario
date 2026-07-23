@@ -1,179 +1,385 @@
-        const spread = (i - (count - 1) / 2) * 0.11;
-        const roll = rollPlayerDamage(1.35 * (1 + (stats.effects.primaryDamagePct || 0) / 100), true);
-        fireProjectile('player', 'fireball', centerX(player) + player.face * 16, centerY(player), player.face * 430, spread * 430, roll.damage + stats.fireDamage, { color: '#ff7b3d', crit: roll.crit, w: 20, h: 20, radius: 62, burn: true });
+
+  /* ==================================================================
+     HUD · UI SCREENS · MAIN LOOP · INIT
+     ================================================================== */
+
+  function drawHUD() {
+    if (!world || !player) return;
+    g.fillStyle = 'rgba(5,9,18,0.75)';
+    g.fillRect(0, 0, VIEW_W, 44);
+
+    g.font = '8px "Press Start 2P", monospace';
+    g.textBaseline = 'top';
+
+    drawBar(12, 8, 180, 14, player.hp / player.maxHp, '#e94f52');
+    g.fillStyle = '#fff'; g.font = '7px "Press Start 2P", monospace';
+    g.fillText('HP ' + Math.ceil(Math.max(0, player.hp)) + '/' + player.maxHp, 18, 10);
+
+    g.font = '8px "Press Start 2P", monospace';
+    var wpn = MS.WEAPONS[player.weapon];
+    g.fillStyle = wpn.color;
+    g.fillText('[' + wpn.letter + '] ' + wpn.name, 200, 8);
+    g.fillStyle = '#fff';
+    g.fillText(player.weaponAmmo === Infinity ? 'AMMO ∞' : 'AMMO ' + player.weaponAmmo, 200, 22);
+
+    g.fillStyle = '#ffe066';
+    g.fillText('BOMB x' + player.grenades, 380, 8);
+
+    g.fillStyle = '#74e79a';
+    g.fillText('POW ' + world.prisoners + '/' + world.prisonerTotal, 380, 22);
+
+    g.fillStyle = '#fff'; g.textAlign = 'right';
+    g.fillText('SCORE ' + fmt(world.score), VIEW_W - 12, 8);
+    g.fillStyle = '#ff9191';
+    g.fillText('x' + player.lives + ' LIVES', VIEW_W - 12, 22);
+    g.textAlign = 'left';
+
+    g.fillStyle = world.stage.theme.accent;
+    g.font = '7px "Press Start 2P", monospace';
+    g.fillText('STAGE ' + (world.stageId + 1) + ' · ' + world.stage.name, 540, 10);
+
+    var timeLeft = Math.max(0, world.stage.timeLimit - world.elapsed);
+    g.fillStyle = timeLeft < 30 ? '#ff6060' : '#c9d5ec';
+    g.fillText('T ' + Math.ceil(timeLeft) + 's', 540, 22);
+
+    g.textBaseline = 'alphabetic';
+    drawToast();
+  }
+
+  function drawBar(x, y, w, h, ratio, color) {
+    g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(x, y, w, h);
+    g.fillStyle = color; g.fillRect(x, y, w * clamp(ratio, 0, 1), h);
+    g.strokeStyle = 'rgba(255,255,255,0.2)'; g.lineWidth = 1; g.strokeRect(x, y, w, h);
+  }
+
+  function drawTitle() {
+    titleT += 0.016;
+    g.fillStyle = '#0b101d'; g.fillRect(0, 0, VIEW_W, VIEW_H);
+
+    for (var i = 0; i < 40; i++) {
+      var sx = (i * 73 + titleT * 30) % (VIEW_W + 20) - 10;
+      var sy = (i * 41) % VIEW_H;
+      g.fillStyle = 'rgba(255,255,255,' + (0.1 + (i % 3) * 0.1) + ')';
+      g.fillRect(sx, sy, 2, 2);
+    }
+
+    g.textAlign = 'center';
+    g.font = '48px "Press Start 2P", monospace';
+    g.fillStyle = '#ff8c42'; g.shadowColor = '#ff5e1a'; g.shadowBlur = 20;
+    g.fillText('METAL', VIEW_W / 2, 160);
+    g.fillStyle = '#ffd76a'; g.shadowColor = '#d8a030'; g.shadowBlur = 20;
+    g.fillText('STRIKE', VIEW_W / 2, 220);
+    g.shadowBlur = 0;
+
+    g.font = '12px "Press Start 2P", monospace';
+    g.fillStyle = '#7a8aaa';
+    g.fillText('RUN & GUN · 5 OPERATIONS', VIEW_W / 2, 260);
+
+    var blink = Math.floor(titleT * 2) % 2 === 0;
+    if (blink) {
+      g.font = '16px "Press Start 2P", monospace';
+      g.fillStyle = '#74e79a';
+      g.fillText('[ENTER] 작전 개시', VIEW_W / 2, 380);
+    }
+
+    g.font = '9px "Press Start 2P", monospace';
+    g.fillStyle = '#555';
+    g.fillText('A/D 이동 · SPACE 점프 · J 사격 · K 수류탄 · S 앉기', VIEW_W / 2, 480);
+    g.fillText('SHIFT 달리기 · ↑ 올려쏘기', VIEW_W / 2, 500);
+
+    g.fillStyle = '#888';
+    if (save.totalKills > 0) g.fillText('격파 ' + save.totalKills + ' · 포로 ' + save.totalPrisoners + ' · 총점 ' + fmt(save.totalScore), VIEW_W / 2, 555);
+
+    g.textAlign = 'left';
+  }
+
+  function drawSelect() {
+    stateT += 0.016;
+    g.fillStyle = '#0b101d'; g.fillRect(0, 0, VIEW_W, VIEW_H);
+    g.textAlign = 'center';
+    g.font = '20px "Press Start 2P", monospace';
+    g.fillStyle = '#ffe066'; g.fillText('작전 선택', VIEW_W / 2, 70);
+    g.font = '9px "Press Start 2P", monospace';
+    g.fillStyle = '#7a8aaa'; g.fillText('← → 로 스테이지 선택 · ENTER 시작', VIEW_W / 2, 100);
+
+    var cols = Math.min(5, MS.TOTAL_STAGES);
+    var cardW = 150, cardH = 200, gap = 20;
+    var totalW = cols * cardW + (cols - 1) * gap;
+    var startX = (VIEW_W - totalW) / 2;
+
+    for (var i = 0; i < MS.TOTAL_STAGES; i++) {
+      var cx = startX + i * (cardW + gap);
+      var cy = 150;
+      var unlocked = MS.stageUnlocked(save, i);
+      var selected = i === selectedStage;
+      var th = MS.STAGES[i].theme;
+
+      g.fillStyle = unlocked ? (selected ? '#1a2a1a' : '#111a2c') : '#0a0e14';
+      g.fillRect(cx, cy, cardW, cardH);
+      g.strokeStyle = unlocked ? (selected ? th.accent : '#334464') : '#222'; g.lineWidth = selected ? 3 : 2;
+      g.strokeRect(cx, cy, cardW, cardH); g.lineWidth = 1;
+
+      g.fillStyle = unlocked ? th.sky : '#1a1a1a';
+      g.fillRect(cx + 4, cy + 4, cardW - 8, 40);
+
+      g.font = '18px "Press Start 2P", monospace';
+      g.fillStyle = unlocked ? th.accent : '#444';
+      g.fillText(String(i + 1), cx + cardW / 2, cy + 32);
+
+      g.font = '8px "Press Start 2P", monospace';
+      g.fillStyle = unlocked ? '#fff' : '#444';
+      var name = MS.STAGES[i].name;
+      if (name.length > 14) name = name.substring(0, 12) + '..';
+      g.fillText(name, cx + cardW / 2, cy + 65);
+
+      g.fillStyle = unlocked ? '#8a9aba' : '#333';
+      g.font = '7px "Press Start 2P", monospace';
+      g.fillText('격파 ' + (save.highScores[String(i)] || 0), cx + cardW / 2, cy + 90);
+
+      var grade = save.bestGrade[String(i)];
+      if (grade) {
+        g.font = '20px "Press Start 2P", monospace';
+        g.fillStyle = grade === 'S' ? '#ffd76a' : grade === 'A' ? '#74e79a' : '#8a9aba';
+        g.fillText(grade, cx + cardW / 2, cy + 130);
       }
-      sfx('fireball');
-    } else {
-      const count = 3 + Math.min(3, stats.effects.multishotExtra || 0);
-      for (let i = 0; i < count; i++) {
-        const spread = (i - (count - 1) / 2) * 0.085;
-        const roll = rollPlayerDamage(1.0 * (1 + (stats.effects.primaryDamagePct || 0) / 100), true);
-        fireProjectile('player', 'arrow', centerX(player), centerY(player), player.face * 680, spread * 680, roll.damage, { color: '#72f39a', crit: roll.crit, w: 22, h: 7 });
+
+      if (unlocked && selected) {
+        var pulse = Math.sin(stateT * 4) * 0.3 + 0.7;
+        g.globalAlpha = pulse;
+        g.font = '8px "Press Start 2P", monospace';
+        g.fillStyle = th.accent;
+        g.fillText(MS.STAGES[i].subtitle, cx + cardW / 2, cy + 170);
+        g.globalAlpha = 1;
       }
-      sfx('slash2');
-    }
-  }
 
-  function secondarySkill() {
-    if (!player || state !== STATE.FIELD || player.secondaryCd > 0) return;
-    const ability = RPG.abilityNumbers(profile)[2];
-    if (player.mp < ability.cost) { toast('마나가 부족합니다.', '#78a9ff'); return; }
-    player.mp -= ability.cost;
-    player.secondaryCd = ability.cooldown;
-    const cls = profile.classId;
-    if (cls === 'vanguard') {
-      player.guardT = 2.2 + (stats.effects.guardDuration || 0);
-      addEffect('aura', centerX(player), centerY(player), { color: '#7fc8ff', r: 46, life: player.guardT, maxLife: player.guardT });
-      toast('철벽 태세', '#8ad5ff');
-    } else if (cls === 'arcanist') {
-      const range = 155;
-      for (const e of enemyAtPoint(centerX(player), centerY(player), range)) {
-        const roll = rollPlayerDamage(1.15 * (1 + (stats.effects.secondaryDamagePct || 0) / 100), true, e);
-        damageEnemy(e, roll.damage + stats.frostDamage, { crit: roll.crit, freeze: 1.25 + (stats.effects.freezeDuration || 0), color: '#74d9ff', knockback: 3 });
-      }
-      addEffect('nova', centerX(player), centerY(player), { color: '#74d9ff', r: range, life: 0.65, maxLife: 0.65 });
-      sfx('freeze');
-    } else {
-      player.dashT = 0.34;
-      player.invuln = Math.max(player.invuln, 0.34 + (stats.effects.dashInvuln || 0));
-      player.vx = player.face * 820;
-      if (stats.effects.freeShotAfterDash) player.freePrimary = true;
-      for (const e of enemyAtPoint(centerX(player) + player.face * 60, centerY(player), 105)) {
-        const roll = rollPlayerDamage(1.05, true, e); damageEnemy(e, roll.damage, { crit: roll.crit, dir: player.face, color: '#72f39a' });
-      }
-      addEffect('dash', centerX(player), centerY(player), { color: '#72f39a', r: 70, life: 0.38, maxLife: 0.38, face: player.face });
-      if (hasUnique('stormstep')) {
-        for (const e of enemyAtPoint(centerX(player), centerY(player), 130)) {
-          const roll = rollPlayerDamage(0.55, true, e); damageEnemy(e, roll.damage, { color: '#ffe66d' });
-        }
-      }
-      sfx('powerup');
-    }
-  }
-
-  function usePotion(kind) {
-    if (!player || state !== STATE.FIELD || player.potionLock > 0) return;
-    if (profile.potions[kind] <= 0) { toast((kind === 'hp' ? '체력' : '마나') + ' 물약이 없습니다.', '#ff8c8c'); return; }
-    if (kind === 'hp' && player.hp >= stats.maxHp) return;
-    if (kind === 'mp' && player.mp >= stats.maxMp) return;
-    profile.potions[kind]--;
-    player.potionLock = 0.45;
-    if (kind === 'hp') {
-      const amount = Math.round(stats.maxHp * 0.42);
-      player.hp = Math.min(stats.maxHp, player.hp + amount);
-      addFloat(centerX(player), player.y - 10, '+' + amount + ' HP', '#63f58a');
-    } else {
-      const amount = Math.round(stats.maxMp * 0.48);
-      player.mp = Math.min(stats.maxMp, player.mp + amount);
-      addFloat(centerX(player), player.y - 10, '+' + amount + ' MP', '#66a5ff');
-    }
-    sfx('potion');
-  }
-
-  function openChest(chest) {
-    if (!chest || chest.opened) return;
-    chest.opened = true;
-    world.chestsOpened++;
-    if (chest.key) {
-      world.keyFound = true;
-      toast('봉인 열쇠를 획득했습니다!', '#ffe66d');
-      spawnDrop(chest.x + 18, chest.y - 10, 'key', 1);
-    }
-    spawnDrop(chest.x + 8, chest.y - 5, 'gold', 45 + world.stage.level * 16);
-    spawnDrop(chest.x + 26, chest.y - 12, 'item', RPG.createItem(world.stage.level + 1, world.rng, { rarity: chest.rarity, luck: 9 }));
-    addEffect('burst', centerX(chest), centerY(chest), { color: '#ffe66d', r: 34 });
-    sfx('itemdrop');
-    updateObjective();
-  }
-
-  function pickupDrop(drop) {
-    if (drop.picked) return;
-    if (drop.kind === 'gold') {
-      profile.gold += drop.payload; addFloat(drop.x, drop.y, '+' + drop.payload + 'G', '#ffe66d');
-    } else if (drop.kind === 'item') {
-      if (profile.inventory.length >= RPG.INVENTORY_CAP) { addFloat(drop.x, drop.y, '가방 가득', '#ff7474'); return; }
-      profile.inventory.push(drop.payload); addFloat(drop.x, drop.y, drop.payload.name, rarityColor(drop.payload.rarity));
-    } else if (drop.kind === 'hp' || drop.kind === 'mp') {
-      profile.potions[drop.kind] += drop.payload || 1; addFloat(drop.x, drop.y, (drop.kind === 'hp' ? '체력' : '마나') + ' 물약', '#8ddcff');
-    } else if (drop.kind === 'key') {
-      addFloat(drop.x, drop.y, '봉인 열쇠', '#ffe66d');
-    }
-    drop.picked = true;
-    sfx('itempick');
-  }
-
-  function updatePlayer(dt) {
-    if (!player) return;
-    const move = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-    const slow = player.slowT > 0 ? 0.65 : 1;
-    const targetSpeed = (input.run ? stats.move * 100 * 1.45 : stats.move * 100) * slow;
-    if (player.dashT > 0) {
-      player.dashT -= dt;
-    } else if (move) {
-      player.face = move;
-      player.vx += move * (player.onGround ? 1850 : 1080) * dt;
-      player.vx = clamp(player.vx, -targetSpeed, targetSpeed);
-    } else {
-      player.vx *= player.onGround ? Math.pow(0.0008, dt) : Math.pow(0.15, dt);
-      if (Math.abs(player.vx) < 4) player.vx = 0;
-    }
-    player.jumpBuffer = Math.max(0, player.jumpBuffer - dt);
-    if (player.onGround) player.coyote = 0.11; else player.coyote = Math.max(0, player.coyote - dt);
-    if (player.jumpBuffer > 0 && player.coyote > 0) {
-      player.vy = -650; player.onGround = false; player.coyote = 0; player.jumpBuffer = 0; sfx('jump');
-    }
-    if (!input.jump && player.vy < -230) player.vy += 1300 * dt;
-    moveEntityPhysics(player, dt, true);
-    if (player.attackCd > 0) player.attackCd -= dt;
-    if (player.attackT > 0) player.attackT -= dt;
-    if (player.comboT > 0) player.comboT -= dt; else player.combo = 0;
-    if (player.primaryCd > 0) player.primaryCd -= dt;
-    if (player.secondaryCd > 0) player.secondaryCd -= dt;
-    if (player.invuln > 0) player.invuln -= dt;
-    if (player.guardT > 0) player.guardT -= dt;
-    if (player.slowT > 0) player.slowT -= dt;
-    if (player.potionLock > 0) player.potionLock -= dt;
-    player.hp = Math.min(stats.maxHp, player.hp + stats.hpRegen * dt);
-    player.mp = Math.min(stats.maxMp, player.mp + stats.mpRegen * (1 + (stats.effects.manaRegenPct || 0) / 100) * dt);
-
-    for (const chest of world.chests) if (!chest.opened && overlap(player, chest)) openChest(chest);
-    for (const drop of world.drops) if (!drop.picked && Math.hypot(centerX(player) - centerX(drop), centerY(player) - centerY(drop)) < 42) pickupDrop(drop);
-    if (overlap(player, world.gate)) {
-      if (world.gateOpen) completeCurrentStage();
-      else if (toastTimer <= 0.2) toast('관문이 봉인되어 있습니다. 목표를 완료하십시오.', '#ffcf69');
-    }
-    world.cameraX = clamp(centerX(player) - VIEW_W * 0.36, 0, world.width - VIEW_W);
-    const checkpoint = Math.floor(player.x / 1200) * 1200 + 70;
-    if (checkpoint > world.checkpoint) world.checkpoint = checkpoint;
-  }
-
-  function shootAtPlayer(enemy, kind, speed) {
-    const dx = centerX(player) - centerX(enemy), dy = centerY(player) - centerY(enemy);
-    const len = Math.hypot(dx, dy) || 1;
-    fireProjectile('enemy', kind || 'enemy', centerX(enemy), centerY(enemy), dx / len * (speed || 260), dy / len * (speed || 260), enemy.damage, { color: enemy.type === 'demon' ? '#ff7040' : '#d8e1f0', w: 14, h: 10 });
-  }
-
-  function updateBoss(enemy, dt) {
-    const ratio = enemy.hp / enemy.maxHp;
-    const phase = ratio > 0.68 ? 1 : ratio > 0.34 ? 2 : 3;
-    if (phase !== enemy.bossPhase) {
-      enemy.bossPhase = phase; enemy.stateT = 0; world.shake = 0.5;
-      toast('쿠파 대왕 · ' + phase + '단계', '#ff6760');
-      if (phase === 2) {
-        world.enemies.push(makeEnemy('shaman', enemy.x - 150, world.stageIndex, null, world.rng));
-        world.enemies.push(makeEnemy('charger', enemy.x + 150, world.stageIndex, null, world.rng));
+      if (!unlocked) {
+        g.font = '20px "Press Start 2P", monospace';
+        g.fillStyle = '#333';
+        g.fillText('🔒', cx + cardW / 2, cy + 110);
       }
     }
-    enemy.stateT -= dt;
-    const dx = centerX(player) - centerX(enemy);
-    enemy.face = dx >= 0 ? 1 : -1;
-    if (enemy.stateT <= 0) {
-      const pattern = world.rng.int(0, phase + 1);
-      if (pattern <= 1) {
-        const shots = 2 + phase;
-        for (let i = 0; i < shots; i++) {
-          const angle = -0.32 + i * (0.64 / Math.max(1, shots - 1));
-          fireProjectile('enemy', 'bossfire', centerX(enemy), enemy.y + 22, enemy.face * Math.cos(angle) * 320, Math.sin(angle) * 320, enemy.damage * 0.72, { color: '#ff5b32', w: 20, h: 20, radius: 45 });
-        }
-      } else if (pattern === 2) {
-        addEffect('shockwave', centerX(enemy), GROUND_Y, { color: '#ff6b45', r: 210, life: 1.0, maxLife: 1.0 });
+
+    g.textAlign = 'left';
+  }
+
+  function drawBrief() {
+    stateT += 0.016;
+    var stage = MS.STAGES[selectedStage];
+    var th = stage.theme;
+    g.fillStyle = th.sky; g.fillRect(0, 0, VIEW_W, VIEW_H);
+    g.fillStyle = 'rgba(5,9,18,0.7)'; g.fillRect(0, 0, VIEW_W, VIEW_H);
+
+    g.textAlign = 'center';
+    g.font = '28px "Press Start 2P", monospace';
+    g.fillStyle = th.accent; g.fillText('MISSION ' + (selectedStage + 1), VIEW_W / 2, 140);
+    g.font = '18px "Press Start 2P", monospace';
+    g.fillStyle = '#fff'; g.fillText(stage.name, VIEW_W / 2, 180);
+    g.font = '10px "Press Start 2P", monospace';
+    g.fillStyle = '#8a9aba'; g.fillText(stage.subtitle, VIEW_W / 2, 210);
+
+    g.font = '9px "Press Start 2P", monospace';
+    g.fillStyle = '#c9d5ec';
+    g.fillText('적 세력 ' + stage.spawns.reduce(function (s, sp) { return s + sp.count; }, 0) + '체 · 포로 ' + stage.prisoners + '명', VIEW_W / 2, 270);
+    g.fillText('거리 ' + stage.width + 'm · 제한시간 ' + stage.timeLimit + '초', VIEW_W / 2, 295);
+
+    var boss = MS.BOSSES[selectedStage];
+    if (boss) {
+      g.font = '12px "Press Start 2P", monospace';
+      g.fillStyle = '#ff5e5e';
+      g.fillText('BOSS: ' + boss.name, VIEW_W / 2, 340);
+      g.font = '8px "Press Start 2P", monospace';
+      g.fillStyle = '#8a5a5a';
+      g.fillText(boss.subtitle + ' · HP ' + boss.hp, VIEW_W / 2, 365);
+    }
+
+    var blink = Math.floor(stateT * 2) % 2 === 0;
+    if (blink) {
+      g.font = '14px "Press Start 2P", monospace';
+      g.fillStyle = '#74e79a';
+      g.fillText('[ENTER] 전장 투입', VIEW_W / 2, 450);
+    }
+    g.textAlign = 'left';
+  }
+
+  function drawPaused() {
+    g.fillStyle = 'rgba(5,9,18,0.8)'; g.fillRect(0, 0, VIEW_W, VIEW_H);
+    g.textAlign = 'center';
+    g.font = '32px "Press Start 2P", monospace';
+    g.fillStyle = '#ffe066'; g.fillText('일시정지', VIEW_W / 2, 240);
+    g.font = '10px "Press Start 2P", monospace';
+    g.fillStyle = '#c9d5ec';
+    g.fillText('[P/ESC] 계속 · [Q] 타이틀', VIEW_W / 2, 300);
+    g.textAlign = 'left';
+  }
+
+  function drawClear() {
+    stateT += 0.016;
+    g.fillStyle = 'rgba(5,9,18,0.88)'; g.fillRect(0, 0, VIEW_W, VIEW_H);
+    g.textAlign = 'center';
+
+    g.font = '36px "Press Start 2P", monospace';
+    g.fillStyle = '#74e79a'; g.fillText('MISSION CLEAR', VIEW_W / 2, 130);
+
+    g.font = '60px "Press Start 2P", monospace';
+    g.fillStyle = world._grade === 'S' ? '#ffd76a' : world._grade === 'A' ? '#74e79a' : '#c9d5ec';
+    g.shadowColor = '#ffe066'; g.shadowBlur = 20;
+    g.fillText(world._grade || 'C', VIEW_W / 2, 210);
+    g.shadowBlur = 0;
+
+    g.font = '11px "Press Start 2P", monospace';
+    g.fillStyle = '#c9d5ec'; g.textAlign = 'right';
+    var lx = VIEW_W / 2 - 20, rx = VIEW_W / 2 + 20;
+    var ly = 280;
+    g.fillText('격파', lx, ly); g.textAlign = 'left'; g.fillStyle = '#fff'; g.fillText(world.kills + '체', rx, ly);
+    g.textAlign = 'right'; g.fillStyle = '#c9d5ec'; g.fillText('포로 구출', lx, ly + 30); g.textAlign = 'left'; g.fillStyle = '#74e79a'; g.fillText(world.prisoners + '/' + world.prisonerTotal, rx, ly + 30);
+    g.textAlign = 'right'; g.fillStyle = '#c9d5ec'; g.fillText('시간 보너스', lx, ly + 60); g.textAlign = 'left'; g.fillStyle = '#ffe066'; g.fillText('+' + fmt(world._timeBonus), rx, ly + 60);
+    g.textAlign = 'right'; g.fillStyle = '#c9d5ec'; g.fillText('무피해', lx, ly + 90); g.textAlign = 'left'; g.fillStyle = world._noHit ? '#74e79a' : '#ff5e5e'; g.fillText(world._noHit ? '성공 +5000' : '없음', rx, ly + 90);
+    g.textAlign = 'right'; g.fillStyle = '#ffe066'; g.fillText('총점', lx, ly + 130); g.textAlign = 'left'; g.fillStyle = '#ffd76a'; g.font = '16px "Press Start 2P", monospace'; g.fillText(fmt(world.score), rx, ly + 130);
+
+    var blink = Math.floor(stateT * 2) % 2 === 0;
+    if (blink) {
+      g.font = '12px "Press Start 2P", monospace'; g.textAlign = 'center';
+      g.fillStyle = '#74e79a'; g.fillText('[ENTER] 다음 작전', VIEW_W / 2, 510);
+    }
+    g.textAlign = 'left';
+  }
+
+  function drawOver() {
+    stateT += 0.016;
+    g.fillStyle = 'rgba(5,9,18,0.9)'; g.fillRect(0, 0, VIEW_W, VIEW_H);
+    g.textAlign = 'center';
+    g.font = '40px "Press Start 2P", monospace';
+    g.fillStyle = '#ff5e5e'; g.shadowColor = '#aa0000'; g.shadowBlur = 16;
+    g.fillText('GAME OVER', VIEW_W / 2, 200);
+    g.shadowBlur = 0;
+
+    g.font = '12px "Press Start 2P", monospace';
+    g.fillStyle = '#c9d5ec';
+    g.fillText('격파 ' + (world ? world.kills : 0) + '체 · 점수 ' + fmt(world ? world.score : 0), VIEW_W / 2, 270);
+
+    var blink = Math.floor(stateT * 2) % 2 === 0;
+    if (blink) {
+      g.font = '11px "Press Start 2P", monospace';
+      g.fillStyle = '#74e79a';
+      g.fillText('[ENTER] 재도전 · [Q] 타이틀', VIEW_W / 2, 380);
+    }
+    g.textAlign = 'left';
+  }
+
+  function drawWin() {
+    stateT += 0.016;
+    g.fillStyle = '#0b101d'; g.fillRect(0, 0, VIEW_W, VIEW_H);
+    for (var i = 0; i < 60; i++) {
+      var sx = (i * 89 + stateT * 80) % VIEW_W;
+      var sy = (i * 53 + stateT * 40) % VIEW_H;
+      g.fillStyle = 'rgba(255,' + (200 + (i % 55)) + ',100,0.4)';
+      g.fillRect(sx, sy, 3, 3);
+    }
+    g.textAlign = 'center';
+    g.font = '36px "Press Start 2P", monospace';
+    g.fillStyle = '#ffd76a'; g.shadowColor = '#ff8c42'; g.shadowBlur = 20;
+    g.fillText('CAMPAIGN COMPLETE', VIEW_W / 2, 180);
+    g.shadowBlur = 0;
+
+    g.font = '14px "Press Start 2P", monospace';
+    g.fillStyle = '#fff'; g.fillText('모든 작전을 완수했다!', VIEW_W / 2, 230);
+
+    g.font = '10px "Press Start 2P", monospace';
+    g.fillStyle = '#74e79a';
+    g.fillText('총 격파 ' + save.totalKills + '체', VIEW_W / 2, 300);
+    g.fillText('총 포로 구출 ' + save.totalPrisoners + '명', VIEW_W / 2, 325);
+    g.fillText('총 점수 ' + fmt(save.totalScore), VIEW_W / 2, 350);
+
+    var blink = Math.floor(stateT * 2) % 2 === 0;
+    if (blink) {
+      g.font = '12px "Press Start 2P", monospace';
+      g.fillStyle = '#ffe066'; g.fillText('[ENTER] 타이틀로', VIEW_W / 2, 460);
+    }
+    g.textAlign = 'left';
+  }
+
+  /* ===== 메인 루프 ===== */
+  function tick(time) {
+    rafId = requestAnimationFrame(tick);
+    var dt = Math.min(0.05, (time - lastTime) / 1000);
+    lastTime = time;
+
+    if (state === STATE.PLAY) updatePlay(dt);
+    else if (state === STATE.PAUSED || state === STATE.CLEAR || state === STATE.OVER || state === STATE.WIN || state === STATE.BRIEF) stateT += dt;
+
+    g.save();
+    if (world && world.shake > 0 && state === STATE.PLAY) {
+      g.translate((Math.random() - 0.5) * world.shake, (Math.random() - 0.5) * world.shake);
+    }
+
+    if (state === STATE.TITLE) drawTitle();
+    else if (state === STATE.SELECT) drawSelect();
+    else if (state === STATE.BRIEF) drawBrief();
+    else if (state === STATE.PLAY) { drawField(); drawHUD(); drawFlash(); }
+    else if (state === STATE.PAUSED) { drawField(); drawHUD(); drawPaused(); }
+    else if (state === STATE.CLEAR) { drawField(); drawHUD(); drawClear(); }
+    else if (state === STATE.OVER) { drawField(); drawOver(); }
+    else if (state === STATE.WIN) drawWin();
+
+    g.restore();
+
+    g.fillStyle = 'rgba(0,0,0,0.04)';
+    for (var sy = 0; sy < VIEW_H; sy += 3) g.fillRect(0, sy, VIEW_W, 1);
+  }
+
+  /* ===== 초기화 ===== */
+  save = loadSaveData();
+
+  var btnSound = $('btn-sound');
+  if (btnSound) {
+    btnSound.addEventListener('click', function () {
+      var muted = Audio.toggle();
+      btnSound.textContent = muted ? 'SOUND OFF' : 'SOUND ON';
+    });
+  }
+
+  function bindTouch(id, inputKey, isAction) {
+    var el = $(id);
+    if (!el) return;
+    var press = function (v) {
+      if (isAction) { if (v) Audio.ensure(); input[inputKey] = v; if (v && inputKey === 'fire') firePressed = true; if (v && inputKey === 'jump') input.jump = true; if (!v && inputKey === 'jump') input.jump = false; }
+      else { input[inputKey] = v; }
+    };
+    el.addEventListener('touchstart', function (e) { e.preventDefault(); press(true); });
+    el.addEventListener('touchend', function (e) { e.preventDefault(); press(false); });
+    el.addEventListener('mousedown', function (e) { e.preventDefault(); press(true); });
+    el.addEventListener('mouseup', function (e) { e.preventDefault(); press(false); });
+  }
+  bindTouch('tb-left', 'left');
+  bindTouch('tb-right', 'right');
+  bindTouch('tb-run', 'run');
+  bindTouch('tb-jump', 'jump', true);
+  bindTouch('tb-atk', 'fire', true);
+  bindTouch('tb-primary', 'up', true);
+  bindTouch('tb-secondary', 'down', true);
+
+  var grenadeBtn = $('tb-pot');
+  if (grenadeBtn) {
+    var grenadePress = function () { Audio.ensure(); grenadePressed = true; };
+    grenadeBtn.addEventListener('touchstart', function (e) { e.preventDefault(); grenadePress(); });
+    grenadeBtn.addEventListener('mousedown', function (e) { e.preventDefault(); grenadePress(); });
+  }
+
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('keyup', onKeyUp);
+
+  cvs.addEventListener('mousedown', function (e) {
+    Audio.ensure();
+    if (state === STATE.TITLE) goSelect();
+    else if (state === STATE.SELECT) startStage(selectedStage);
+    else if (state === STATE.BRIEF) beginPlay();
+    else if (state === STATE.CLEAR) nextStage();
+    else if (state === STATE.OVER) retryStage();
+    else if (state === STATE.WIN) goTitle();
+  });
+
+  lastTime = nowMs();
+  rafId = requestAnimationFrame(tick);
+
+  root.MetalStrike = true;
+})(typeof globalThis !== 'undefined' ? globalThis : window);

@@ -1,250 +1,136 @@
-    const mul = scale == null ? 1 : scale;
-    if (!source) return target;
-    for (const [key, raw] of Object.entries(source)) {
-      const value = Number(raw) || 0;
-      target[key] = (target[key] || 0) + value * mul;
-    }
-    return target;
+
+  /* ======================== 점수 시스템 ======================== */
+  function calcStageScore(info) {
+    var kill = (info.kills || 0) * 150;
+    var prison = (info.prisoners || 0) * 1000;
+    var timeBonus = Math.floor((info.timeRemaining || 0) * 15);
+    var noHitBonus = info.noHit ? 10000 : 0;
+    var grenadeBonus = (info.grenadesLeft || 0) * 100;
+    return kill + prison + timeBonus + noHitBonus + grenadeBonus;
   }
 
-  function skillEffects(profile) {
-    const out = {};
-    const tree = SKILL_TREES[profile.classId] || [];
-    for (const node of tree) {
-      const rank = profile.skills[node.id] || 0;
-      if (rank) addStats(out, node.effect, rank);
-    }
-    return out;
+  function scoreGrade(score) {
+    if (score >= 40000) return 'S';
+    if (score >= 28000) return 'A';
+    if (score >= 16000) return 'B';
+    if (score >= 8000) return 'C';
+    return 'D';
   }
 
-  function createStarterItem(classId) {
-    const names = { vanguard: '수습 기사의 검', arcanist: '견습 마도봉', ranger: '정찰대 쌍검' };
-    const attack = { vanguard: 7, arcanist: 6, ranger: 7 }[classId] || 6;
-    return {
-      id: 'starter-' + classId,
-      name: names[classId] || '수습 무기',
-      slot: 'weapon', rarity: 'common', level: 1, upgrade: 0,
-      stats: { attack }, affixes: [], value: 18, starter: true,
-    };
-  }
+  function formatScore(n) { return String(Math.floor(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 
-  function createProfile(classId, now) {
-    if (!CLASS_DEFS[classId]) throw new Error('알 수 없는 직업: ' + classId);
-    const equipment = {};
-    for (const slot of SLOTS) equipment[slot] = null;
-    equipment.weapon = createStarterItem(classId);
+  /* ======================== 세이브 시스템 ======================== */
+  function createSave() {
     return {
       version: SAVE_VERSION,
-      id: 'hero-' + hashString(String(now || Date.now()) + classId).toString(16),
-      classId,
-      name: CLASS_DEFS[classId].name,
-      level: 1,
-      xp: 0,
-      gold: 320,
-      materials: 6,
-      skillPoints: 2,
-      statPoints: 0,
-      alloc: { might: 0, vitality: 0, focus: 0, agility: 0 },
-      skills: {},
-      equipment,
-      inventory: [],
-      potions: { hp: 4, mp: 3 },
-      unlockedStage: 0,
-      clearedStages: [],
-      stageBest: {},
-      quests: createQuestState(),
-      counters: { kills: 0, chests: 0, elites: 0, bosses: 0, upgrades: 0, stages: 0, noDeathClears: 0 },
-      deaths: 0,
-      playSeconds: 0,
-      shopSeed: hashString(classId + ':' + (now || Date.now())),
-      shopRefreshes: 0,
-      shopPurchased: {},
-      won: false,
-      createdAt: Number(now || Date.now()),
-      lastSavedAt: 0,
-      settings: { sound: true },
+      unlockedStages: 1,
+      highScores: {},
+      totalKills: 0,
+      totalPrisoners: 0,
+      totalScore: 0,
+      bestGrade: {},
     };
   }
 
-  function deriveStats(profile) {
-    const cls = CLASS_DEFS[profile.classId];
-    if (!cls) throw new Error('프로필 직업 데이터가 없습니다.');
-    const levelDelta = Math.max(0, profile.level - 1);
-    const stats = {
-      maxHp: cls.base.maxHp + cls.growth.maxHp * levelDelta + (profile.alloc.vitality || 0) * 10,
-      maxMp: cls.base.maxMp + cls.growth.maxMp * levelDelta + (profile.alloc.focus || 0) * 7,
-      attack: cls.base.attack + cls.growth.attack * levelDelta + (profile.alloc.might || 0) * 1.5,
-      armor: cls.base.armor + cls.growth.armor * levelDelta + (profile.alloc.vitality || 0) * 0.6,
-      crit: cls.base.crit + (profile.alloc.agility || 0) * 0.35,
-      critDamage: 175,
-      move: cls.base.move,
-      skillPower: cls.base.skillPower,
-      hpRegen: 0.7,
-      mpRegen: 1.1,
-      dodge: 0,
-      leech: 0,
-      attackPct: 0,
-      armorPct: 0,
-      maxHpPct: 0,
-      maxMpPct: 0,
-      movePct: 0,
-      skillDamagePct: 0,
-      cooldownPct: 0,
-      manaCostPct: 0,
-      fireDamage: 0,
-      frostDamage: 0,
-    };
-    for (const slot of SLOTS) {
-      const item = profile.equipment && profile.equipment[slot];
-      if (item) addStats(stats, item.stats);
+  function validateSave(data) {
+    if (!data || typeof data !== 'object') return createSave();
+    var save = createSave();
+    save.unlockedStages = clamp(data.unlockedStages || 1, 1, TOTAL_STAGES);
+    save.highScores = (data.highScores && typeof data.highScores === 'object') ? data.highScores : {};
+    save.totalKills = Math.max(0, data.totalKills || 0);
+    save.totalPrisoners = Math.max(0, data.totalPrisoners || 0);
+    save.totalScore = Math.max(0, data.totalScore || 0);
+    save.bestGrade = (data.bestGrade && typeof data.bestGrade === 'object') ? data.bestGrade : {};
+    return save;
+  }
+
+  function loadSave() {
+    try {
+      if (typeof localStorage === 'undefined') return null;
+      var raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      return validateSave(JSON.parse(raw));
+    } catch (e) { return null; }
+  }
+
+  function saveSave(save) {
+    try {
+      if (typeof localStorage === 'undefined') return false;
+      localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function clearSave() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.removeItem(SAVE_KEY);
+    } catch (e) {}
+  }
+
+  function unlockNextStage(save, stageId) {
+    if (stageId + 1 < TOTAL_STAGES) {
+      save.unlockedStages = Math.max(save.unlockedStages, stageId + 2);
     }
-    const effects = skillEffects(profile);
-    addStats(stats, effects);
-    stats.maxHp = Math.round(stats.maxHp * (1 + (stats.maxHpPct || 0) / 100));
-    stats.maxMp = Math.round(stats.maxMp * (1 + (stats.maxMpPct || 0) / 100));
-    stats.attack = Math.max(1, Math.round(stats.attack * (1 + (stats.attackPct || 0) / 100)));
-    stats.armor = Math.max(0, Math.round(stats.armor * (1 + (stats.armorPct || 0) / 100)));
-    stats.move = Number((stats.move * (1 + (stats.movePct || 0) / 100)).toFixed(2));
-    stats.crit = clamp(Number(stats.crit.toFixed(1)), 0, 75);
-    stats.critDamage = 175 + (stats.critDamagePct || 0);
-    stats.cooldownMult = clamp(1 + (stats.cooldownPct || 0) / 100, 0.45, 1.5);
-    stats.manaCostMult = clamp(1 + (stats.manaCostPct || 0) / 100, 0.45, 1.5);
-    stats.skillPower *= 1 + (stats.skillDamagePct || 0) / 100;
-    stats.effects = effects;
-    return stats;
+    return save;
   }
 
-  function rollRarity(level, rng, bonus) {
-    rng = normalizeRng(rng);
-    const keys = Object.keys(RARITIES);
-    const weights = keys.map(key => {
-      let w = RARITIES[key].weight;
-      if (key === 'common') w = Math.max(15, w - level * 1.4 - (bonus || 0));
-      if (key === 'rare') w += level * 0.32 + (bonus || 0) * 0.5;
-      if (key === 'epic') w += level * 0.15 + (bonus || 0) * 0.3;
-      if (key === 'unique') w += level * 0.025 + (bonus || 0) * 0.04;
-      return w;
-    });
-    let roll = rng.random() * weights.reduce((a, b) => a + b, 0);
-    for (let i = 0; i < keys.length; i++) {
-      roll -= weights[i];
-      if (roll <= 0) return keys[i];
-    }
-    return 'common';
+  function recordStageResult(save, stageId, score, grade, kills, prisoners) {
+    var key = String(stageId);
+    var prev = save.highScores[key] || 0;
+    save.highScores[key] = Math.max(prev, score);
+    var grades = { S: 5, A: 4, B: 3, C: 2, D: 1 };
+    var prevGrade = save.bestGrade[key] || 'D';
+    if ((grades[grade] || 0) > (grades[prevGrade] || 0)) save.bestGrade[key] = grade;
+    save.totalKills += kills || 0;
+    save.totalPrisoners += prisoners || 0;
+    save.totalScore += score;
+    return save;
   }
 
-  function affixValue(affix, level, rng) {
-    rng = normalizeRng(rng);
-    const low = affix.min + level * affix.perLevel * 0.65;
-    const high = affix.max + level * affix.perLevel;
-    const v = low + (high - low) * rng.random();
-    return affix.stat === 'cooldownPct' ? Math.round(v) : Math.max(1, Math.round(v));
+  function stageUnlocked(save, stageId) {
+    return stageId < save.unlockedStages;
   }
 
-  function chooseBase(slot, level, rng) {
-    rng = normalizeRng(rng);
-    const available = ITEM_BASES[slot].filter(base => base.level <= level + 2);
-    const start = Math.max(0, available.length - 2);
-    return deepClone(available[start + rng.int(0, available.length - 1 - start)] || ITEM_BASES[slot][0]);
+  function allClear(save) {
+    return save.unlockedStages >= TOTAL_STAGES &&
+      Object.keys(save.highScores).length >= TOTAL_STAGES;
   }
 
-  function createItem(level, rng, options) {
-    rng = normalizeRng(rng);
-    const opts = options || {};
-    const rarity = opts.rarity || rollRarity(level, rng, opts.luck || 0);
-    if (rarity === 'unique') {
-      const pool = UNIQUE_ITEMS.filter(item => item.level <= level + 4);
-      const unique = deepClone(rng.pick(pool.length ? pool : UNIQUE_ITEMS.slice(0, 1)));
-      unique.rarity = 'unique'; unique.upgrade = 0; unique.affixes = []; unique.baseName = unique.name;
-      unique.id = unique.id + '-' + rng.int(100000, 999999);
-      unique.value = Math.round((120 + level * 38) * RARITIES.unique.value);
-      return unique;
-    }
-    const slot = opts.slot || rng.pick(SLOTS);
-    const base = chooseBase(slot, level, rng);
-    const item = {
-      id: 'it-' + level + '-' + rng.int(100000, 999999),
-      name: base.name,
-      baseName: base.name,
-      slot,
-      rarity,
-      level: Math.max(1, level),
-      upgrade: 0,
-      stats: deepClone(base.stats),
-      affixes: [],
-      value: Math.round((22 + level * 13) * RARITIES[rarity].value),
-    };
-    const count = RARITIES[rarity].affixes;
-    const used = new Set();
-    for (let i = 0; i < count; i++) {
-      const pool = AFFIXES.filter(a => a.slots.includes(slot) && !used.has(a.id));
-      if (!pool.length) break;
-      const affix = rng.pick(pool);
-      used.add(affix.id);
-      const value = affixValue(affix, level, rng);
-      item.affixes.push({ id: affix.id, name: affix.name, stat: affix.stat, value });
-      item.stats[affix.stat] = (item.stats[affix.stat] || 0) + value;
-    }
-    if (item.affixes.length) item.name = item.affixes[0].name + ' ' + item.name;
-    return item;
-  }
+  /* ======================== 내보내기 ======================== */
+  return Object.freeze({
+    SAVE_VERSION: SAVE_VERSION,
+    SAVE_KEY: SAVE_KEY,
+    TOTAL_STAGES: TOTAL_STAGES,
+    MAX_HP: MAX_HP,
+    START_GRENADES: START_GRENADES,
+    MAX_LIVES: MAX_LIVES,
 
-  function awardXP(profile, amount) {
-    profile.xp += Math.max(0, Math.floor(amount));
-    let levels = 0;
-    while (profile.xp >= xpForLevel(profile.level)) {
-      profile.xp -= xpForLevel(profile.level);
-      profile.level++;
-      profile.skillPoints++;
-      profile.statPoints += 3;
-      levels++;
-    }
-    return levels;
-  }
+    WEAPONS: WEAPONS,
+    WEAPON_KEYS: WEAPON_KEYS,
+    WEAPON_DROP_RATES: WEAPON_DROP_RATES,
+    randomWeaponDrop: randomWeaponDrop,
 
-  function allocateStat(profile, key) {
-    if (!Object.prototype.hasOwnProperty.call(profile.alloc, key)) return { ok: false, reason: 'unknown-stat' };
-    if (profile.statPoints <= 0) return { ok: false, reason: 'no-points' };
-    profile.alloc[key]++;
-    profile.statPoints--;
-    return { ok: true };
-  }
+    ENEMY_TYPES: ENEMY_TYPES,
+    BOSSES: BOSSES,
+    STAGES: STAGES,
 
-  function skillNode(profile, skillId) {
-    return (SKILL_TREES[profile.classId] || []).find(node => node.id === skillId) || null;
-  }
+    clamp: clamp,
+    hashString: hashString,
+    makeRng: makeRng,
 
-  function canBuySkill(profile, skillId) {
-    const node = skillNode(profile, skillId);
-    if (!node) return { ok: false, reason: 'unknown-skill' };
-    const rank = profile.skills[skillId] || 0;
-    if (rank >= node.max) return { ok: false, reason: 'max-rank' };
-    if (profile.skillPoints < node.cost) return { ok: false, reason: 'no-points' };
-    if (node.requires) {
-      const [requiredId, requiredRank] = node.requires;
-      if ((profile.skills[requiredId] || 0) < requiredRank) return { ok: false, reason: 'prerequisite' };
-    }
-    return { ok: true, node };
-  }
+    calcStageScore: calcStageScore,
+    scoreGrade: scoreGrade,
+    formatScore: formatScore,
 
-  function buySkill(profile, skillId) {
-    const check = canBuySkill(profile, skillId);
-    if (!check.ok) return check;
-    profile.skillPoints -= check.node.cost;
-    profile.skills[skillId] = (profile.skills[skillId] || 0) + 1;
-    return { ok: true, rank: profile.skills[skillId] };
-  }
-
-  function equipItem(profile, inventoryIndex) {
-    const item = profile.inventory[inventoryIndex];
-    if (!item) return { ok: false, reason: 'missing-item' };
-    const current = profile.equipment[item.slot] || null;
-    profile.inventory.splice(inventoryIndex, 1);
-    if (current) profile.inventory.push(current);
-    profile.equipment[item.slot] = item;
-    return { ok: true, equipped: item, replaced: current };
-  }
-
-  function unequipItem(profile, slot) {
-    const item = profile.equipment[slot];
-    if (!item) return { ok: false, reason: 'empty-slot' };
+    createSave: createSave,
+    validateSave: validateSave,
+    loadSave: loadSave,
+    saveSave: saveSave,
+    clearSave: clearSave,
+    unlockNextStage: unlockNextStage,
+    recordStageResult: recordStageResult,
+    stageUnlocked: stageUnlocked,
+    allClear: allClear,
+  });
+});

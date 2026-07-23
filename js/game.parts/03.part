@@ -1,175 +1,475 @@
-    const stage = RPG.STAGES[stageIndex];
-    const rng = RPG.makeRng(profile.id + ':' + stage.id + ':' + profile.counters.stages);
-    const w = {
-      stageIndex, stage, rng, width: stage.width, elapsed: 0, remaining: stage.timeLimit,
-      cameraX: 0, shake: 0, objectiveCount: 0, objectiveDone: false,
-      keyFound: false, gateOpen: false, cold: 0, lavaWave: 0, lavaWarning: 0,
-      kills: 0, chestsOpened: 0, elitesKilled: 0, deaths: 0, bossKilled: false,
-      enemies: [], projectiles: [], enemyProjectiles: [], effects: [], floats: [], drops: [],
-      platforms: [], gaps: [], chests: [], braziers: [], cores: [],
-      gate: { x: stage.width - 145, y: GROUND_Y - 92, w: 64, h: 92 },
-      checkpoint: 70, finished: false, phoenixUsed: false,
+
+  /* ==================================================================
+     ENEMIES · BOSSES · STAGE MANAGEMENT
+     ================================================================== */
+
+  var enemyIdCounter = 0;
+
+  function spawnEnemy(type, x) {
+    var def = MS.ENEMY_TYPES[type];
+    if (!def) return null;
+    var e = {
+      id: ++enemyIdCounter, type: type, def: def,
+      x: x, y: GROUND_Y - def.h, w: def.w, h: def.h,
+      vx: 0, vy: 0, hp: def.hp, maxHp: def.hp,
+      face: -1, state: 'idle', stateT: 0, animT: 0,
+      attackCd: 1 + Math.random(), hitFlash: 0, dead: false,
+      burn: 0, burnDps: 0, aggro: false, score: def.score,
     };
+    if (def.flying) { e.y = 150 + Math.random() * 200; e.vy = 0; }
+    if (def.role === 'turret') e.y = GROUND_Y - def.h;
+    return e;
+  }
 
-    for (let x = 520; x < stage.width - 700; x += 680 + rng.int(-100, 120)) {
-      if (rng.random() < 0.55) {
-        const width = rng.int(130, 260), y = GROUND_Y - rng.int(90, 160);
-        w.platforms.push({ x, y, w: width, h: 18, kind: 'stone' });
-      }
+  function damageEnemy(e, dmg, dir) {
+    if (e.dead) return;
+    if (e.def.role === 'shield' && e.face !== dir && e.shieldUp !== false) {
+      addSpark(centerX(e) + dir * e.w * 0.3, centerY(e), '#aaaaff');
+      Audio.sfx('hit');
+      return;
     }
-    for (let x = 1050; x < stage.width - 900; x += 1250 + rng.int(-160, 180)) {
-      const width = rng.int(110, 170);
-      w.gaps.push([x, x + width]);
-      w.platforms.push({ x: x - 25, y: GROUND_Y - 80, w: width + 50, h: 16, kind: 'bridge' });
-    }
-
-    const enemyCount = 10 + stageIndex * 3;
-    for (let i = 0; i < enemyCount; i++) {
-      const x = 430 + i * ((stage.width - 1050) / enemyCount) + rng.int(-80, 90);
-      const type = rng.pick(stage.pools);
-      let eliteId = null;
-      if (rng.random() < 0.08 + stageIndex * 0.025) eliteId = rng.pick(Object.keys(RPG.ELITE_AFFIXES));
-      w.enemies.push(makeEnemy(type, x, stageIndex, eliteId, rng));
-    }
-    if (stage.mechanic === 'eliteHunt' && !w.enemies.some(e => e.eliteId)) {
-      const target = w.enemies[Math.floor(w.enemies.length * 0.65)];
-      const afId = rng.pick(Object.keys(RPG.ELITE_AFFIXES));
-      const replacement = makeEnemy(target.type, target.x, stageIndex, afId, rng);
-      w.enemies[w.enemies.indexOf(target)] = replacement;
-    }
-    if (stage.mechanic === 'boss') {
-      w.enemies.push(makeEnemy('boss', stage.width - 620, stageIndex, 'fortified', rng));
-    }
-
-    const chestPositions = [Math.floor(stage.width * 0.27), Math.floor(stage.width * 0.55), Math.floor(stage.width * 0.78)];
-    chestPositions.forEach((x, i) => w.chests.push({ x, y: GROUND_Y - 32, w: 36, h: 32, opened: false, key: stage.mechanic === 'keyDoor' && i === 1, rarity: i === 2 ? 'rare' : 'magic' }));
-    if (stage.mechanic === 'cold') [850, 1950, 3150, 4300].forEach(x => w.braziers.push({ x, y: GROUND_Y - 38, w: 34, h: 38 }));
-    if (stage.mechanic === 'lava') [1250, 2720, 4300].forEach(x => w.cores.push({ x, y: GROUND_Y - 62, w: 46, h: 62, hp: 160 + stage.level * 14, maxHp: 160 + stage.level * 14, dead: false }));
-    return w;
+    e.hp -= dmg;
+    e.hitFlash = 0.08;
+    e.aggro = true;
+    if (dir) { e.vx += dir * 30; }
+    if (e.hp <= 0) killEnemy(e);
   }
 
-  function createPlayer() {
-    stats = RPG.deriveStats(profile);
-    return {
-      x: 70, y: GROUND_Y - 46, w: 32, h: 46, vx: 0, vy: 0, face: 1,
-      hp: stats.maxHp, mp: stats.maxMp, onGround: false, coyote: 0, jumpBuffer: 0,
-      attackCd: 0, attackT: 0, combo: 0, comboT: 0,
-      primaryCd: 0, secondaryCd: 0, invuln: 0, guardT: 0, dashT: 0,
-      slowT: 0, freePrimary: false, potionLock: 0,
-    };
-  }
-
-  function startStage(stageIndex) {
-    if (!profile || stageIndex > profile.unlockedStage || !RPG.STAGES[stageIndex]) return false;
-    stats = RPG.deriveStats(profile);
-    world = buildWorld(stageIndex);
-    player = createPlayer();
-    setState(STATE.FIELD, null);
-    try { Audio.musicStart(stageIndex % 3); } catch (_) {}
-    toast(world.stage.objective, world.stage.theme.accent);
-    return true;
-  }
-
-  function hasUnique(uniqueId) {
-    return RPG.SLOTS.some(slot => profile.equipment[slot] && String(profile.equipment[slot].id).startsWith(uniqueId));
-  }
-
-  function addFloat(x, y, text, color, size) {
-    if (!world) return;
-    world.floats.push({ x, y, text: String(text), color: color || '#fff', size: size || 12, life: 1.1, maxLife: 1.1 });
-    if (world.floats.length > 40) world.floats.shift();
-  }
-
-  function addEffect(type, x, y, options) {
-    if (!world) return;
-    world.effects.push(Object.assign({ type, x, y, life: 0.5, maxLife: 0.5, r: 12, color: '#fff' }, options || {}));
-    if (world.effects.length > 90) world.effects.shift();
-  }
-
-  function enemyAtPoint(x, y, radius) {
-    return world.enemies.filter(e => !e.dead && Math.hypot(centerX(e) - x, centerY(e) - y) <= radius);
-  }
-
-  function rollPlayerDamage(mult, skill, target) {
-    const variance = 0.88 + Math.random() * 0.24;
-    let damage = stats.attack * mult * variance;
-    if (skill) damage *= stats.skillPower;
-    if (target && target.hp / target.maxHp <= 0.3) damage *= 1 + (stats.effects.executePct || 0) / 100;
-    if (target && (target.role === 'boss' || target.eliteId)) damage *= 1 + (stats.effects.bossDamagePct || 0) / 100;
-    if (hasUnique('wintercrown') && target && target.frozen > 0) damage *= 1.3;
-    if (hasUnique('archon') && player.mp >= stats.maxMp * 0.8 && skill) damage *= 1.2;
-    const crit = Math.random() * 100 < stats.crit;
-    if (crit) damage *= stats.critDamage / 100;
-    return { damage: Math.max(1, Math.round(damage)), crit };
-  }
-
-  function damageCore(core, amount) {
-    if (!core || core.dead) return;
-    core.hp -= amount;
-    addFloat(core.x + core.w / 2, core.y - 8, amount, '#ffb04f');
-    addEffect('burst', core.x + core.w / 2, core.y + core.h / 2, { color: '#ff6b2c', r: 18 });
-    if (core.hp <= 0) {
-      core.dead = true;
-      world.objectiveCount++;
-      sfx('break');
-      toast('균열 핵 파괴 ' + world.objectiveCount + '/' + world.stage.objectiveTarget, '#ff8c42');
-      updateObjective();
-    }
-  }
-
-  function damageEnemy(enemy, amount, options) {
-    if (!enemy || enemy.dead) return false;
-    const opts = options || {};
-    let damage = Math.max(1, Math.round(amount));
-    const incomingFromFront = Math.sign(centerX(player) - centerX(enemy)) === enemy.face;
-    if (enemy.role === 'shield' && incomingFromFront && !opts.breakGuard) {
-      damage = Math.max(1, Math.round(damage * 0.28));
-      addFloat(centerX(enemy), enemy.y - 6, '방어', '#8ed4ff');
-    }
-    enemy.hp -= damage;
-    enemy.hitFlash = 0.12;
-    enemy.aggro = true;
-    enemy.vx += (opts.dir == null ? player.face : opts.dir) * (opts.knockback || 1.5);
-    if (opts.freeze) enemy.frozen = Math.max(enemy.frozen, opts.freeze);
-    if (opts.burn) { enemy.burn = Math.max(enemy.burn, opts.burn.duration); enemy.burnDps = Math.max(enemy.burnDps, opts.burn.dps); }
-    addFloat(centerX(enemy), enemy.y - 8, damage + (opts.crit ? '!' : ''), opts.crit ? '#ffe66d' : (opts.color || '#fff'), opts.crit ? 17 : 12);
-    addEffect('hit', centerX(enemy), centerY(enemy), { color: opts.color || '#fff', r: opts.crit ? 18 : 12, life: 0.22, maxLife: 0.22 });
-    if (stats.leech > 0) player.hp = Math.min(stats.maxHp, player.hp + damage * stats.leech / 100);
-    if (enemy.hp <= 0) killEnemy(enemy, opts);
-    return enemy.dead;
-  }
-
-  function spawnDrop(x, y, kind, payload) {
-    world.drops.push({ x, y, w: 24, h: 24, kind, payload, vy: -4 - Math.random() * 2, vx: (Math.random() * 2 - 1) * 2.2, life: 45, picked: false });
-  }
-
-  function killEnemy(enemy, options) {
-    if (enemy.dead) return;
-    enemy.dead = true;
+  function killEnemy(e) {
+    e.dead = true;
     world.kills++;
-    const opts = options || {};
-    if (enemy.eliteId) world.elitesKilled++;
-    if (enemy.role === 'boss') { world.bossKilled = true; world.objectiveCount = 1; }
-    const levelUps = RPG.awardXP(profile, enemy.def.xp + world.stage.level * 2);
-    if (levelUps) { stats = RPG.deriveStats(profile); player.hp = stats.maxHp; player.mp = stats.maxMp; toast('레벨 업! 스킬 포인트와 능력치 포인트를 획득했습니다.', '#ffe66d'); sfx('levelup'); }
-    const gold = enemy.def.gold[0] + Math.floor(Math.random() * (enemy.def.gold[1] - enemy.def.gold[0] + 1));
-    spawnDrop(centerX(enemy), enemy.y, 'gold', gold + world.stage.level);
-    let itemChance = enemy.role === 'boss' ? 1 : enemy.eliteId ? 0.72 : 0.14;
-    if (Math.random() < itemChance) {
-      const rarity = enemy.role === 'boss' ? (Math.random() < 0.35 ? 'unique' : 'epic') : enemy.eliteId ? 'rare' : undefined;
-      spawnDrop(centerX(enemy) + 12, enemy.y, 'item', RPG.createItem(world.stage.level + (enemy.eliteId ? 2 : 0), world.rng, { rarity, luck: enemy.eliteId ? 12 : 0 }));
+    world.score += e.def.score;
+    addFloat(centerX(e), e.y - 8, '+' + e.def.score, '#ffe066', 12);
+    explodeAt(centerX(e), centerY(e), e.def.miniboss ? 50 : 22, e.def.color);
+    if (!e.def.miniboss) addBlood(centerX(e), centerY(e), 8);
+    Audio.sfx(e.def.miniboss ? 'explode' : 'enemydie');
+
+    if (Math.random() < 0.12 && !e.def.miniboss) {
+      var wpn = MS.randomWeaponDrop(world.rng);
+      world.pickups.push({ x: e.x, y: e.y, w: 24, h: 20, weapon: wpn, vy: -150, life: 12, bob: 0 });
     }
-    if (Math.random() < 0.13) spawnDrop(centerX(enemy) - 10, enemy.y, Math.random() < 0.72 ? 'hp' : 'mp', 1);
-    if (enemy.elite && enemy.eliteId === 'explosive') {
-      addEffect('explosion', centerX(enemy), centerY(enemy), { color: '#ff8b35', r: 90, life: 0.6, maxLife: 0.6 });
-      if (Math.hypot(centerX(player) - centerX(enemy), centerY(player) - centerY(enemy)) < 90) hurtPlayer(enemy.damage * 0.8, enemy);
+    if (Math.random() < 0.06 && !e.def.miniboss) {
+      world.pickups.push({ x: e.x + 10, y: e.y, w: 16, h: 16, type: 'grenade', count: 3, vy: -120, life: 12, bob: 0 });
     }
-    const combustChance = stats.effects.combustChance || 0;
-    if (combustChance && (opts.burn || enemy.burn > 0) && Math.random() * 100 < combustChance) {
-      addEffect('explosion', centerX(enemy), centerY(enemy), { color: '#ff6b35', r: 82, life: 0.52, maxLife: 0.52 });
-      for (const nearby of enemyAtPoint(centerX(enemy), centerY(enemy), 82)) {
-        const roll = rollPlayerDamage(0.65, true, nearby);
-        damageEnemy(nearby, roll.damage, { crit: roll.crit, color: '#ff6b35', burn: { duration: 2.2, dps: Math.max(2, stats.fireDamage) } });
+  }
+
+  function updateEnemy(e, dt) {
+    if (e.dead) return;
+    if (e.hitFlash > 0) e.hitFlash -= dt;
+    if (e.attackCd > 0) e.attackCd -= dt;
+    if (e.burn > 0) {
+      e.burn -= dt;
+      e.burnDps = e.burnDps || 0;
+      e._burnTick = (e._burnTick || 0) - dt;
+      if (e._burnTick <= 0) { e._burnTick = 0.3; damageEnemy(e, e.burnDps * 0.3, 0); }
+      if (e.dead) return;
+    }
+
+    e.animT += dt;
+    var dx = centerX(player) - centerX(e);
+    var adx = Math.abs(dx);
+
+    if (e.def.flying) {
+      e.stateT = (e.stateT || 0) + dt;
+      e.face = dx >= 0 ? 1 : -1;
+      var targetY = player.y - 60 + Math.sin(e.stateT * 2) * 40;
+      e.vy = (targetY - centerY(e)) * 1.5;
+      e.x += Math.sign(dx) * e.def.speed * dt * 0.4;
+      e.y += e.vy * dt;
+      if (e.attackCd <= 0 && adx < e.def.shootRange) {
+        e.attackCd = e.def.attackCd;
+        var ang = Math.atan2(centerY(player) - centerY(e), dx);
+        spawnEnemyBullet(centerX(e), centerY(e), Math.cos(ang) * e.def.projSpeed, Math.sin(ang) * e.def.projSpeed, e.def.projDamage);
+        Audio.sfx('hit');
+      }
+      if (overlap(e, player) && !player.dead) { hurtPlayer(e.def.damage); e.vx = -Math.sign(dx) * 100; }
+      e.x += e.vx * dt; e.vx *= 0.9;
+      return;
+    }
+
+    if (e.def.role === 'turret') {
+      e.face = dx >= 0 ? 1 : -1;
+      if (e.attackCd <= 0 && adx < e.def.shootRange && adx > 50) {
+        e.attackCd = e.def.attackCd;
+        e.state = 'fire';
+        e.stateT = 0;
+        spawnEnemyBullet(centerX(e) + e.face * 20, centerY(e), e.face * e.def.projSpeed, 0, e.def.projDamage, '#ff8844');
+        Audio.sfx('shotgun');
+        addMuzzleFlash(centerX(e) + e.face * 24, centerY(e), e.face, false);
+      }
+      return;
+    }
+
+    if (e.def.miniboss && e.def.role === 'tank') {
+      updateTank(e, dt);
+      return;
+    }
+
+    e.face = dx >= 0 ? 1 : -1;
+    if (adx < 700) e.aggro = true;
+    if (!e.aggro) return;
+
+    if (e.def.role === 'walker') {
+      if (adx > e.def.attackRange) { e.vx = e.face * e.def.speed; e.state = e.vx !== 0 ? 'walk' : 'idle'; }
+      else { e.vx *= 0.7; e.state = 'idle'; if (e.attackCd <= 0) { e.attackCd = e.def.attackCd; hurtPlayer(e.def.damage); addSpark(centerX(e), centerY(e), '#ff4444'); } }
+    } else if (e.def.role === 'shooter') {
+      if (adx > e.def.shootRange) e.vx = e.face * e.def.speed;
+      else if (adx < 180) e.vx = -e.face * e.def.speed * 0.8;
+      else e.vx *= 0.8;
+      if (e.attackCd <= 0 && adx < e.def.shootRange) {
+        e.attackCd = e.def.attackCd; e.state = 'shoot'; e.stateT = 0;
+        spawnEnemyBullet(centerX(e) + e.face * 16, centerY(e) - 4, e.face * e.def.projSpeed, 0, e.def.projDamage);
+        Audio.sfx('hit'); addMuzzleFlash(centerX(e) + e.face * 20, centerY(e) - 4, e.face, false);
+      }
+    } else if (e.def.role === 'shield') {
+      e.vx = e.face * e.def.speed * 0.6;
+      e.shieldUp = adx > 60;
+      if (adx < e.def.attackRange && e.attackCd <= 0) { e.attackCd = e.def.attackCd; hurtPlayer(e.def.damage); }
+    } else if (e.def.role === 'launcher') {
+      if (adx > e.def.shootRange) e.vx = e.face * e.def.speed * 0.5;
+      else e.vx *= 0.8;
+      if (e.attackCd <= 0 && adx < e.def.shootRange) {
+        e.attackCd = e.def.attackCd; e.state = 'aim';
+        var tang = Math.atan2(centerY(player) - centerY(e), dx);
+        spawnEnemyBullet(centerX(e), centerY(e), Math.cos(tang) * e.def.projSpeed, Math.sin(tang) * e.def.projSpeed - 50, e.def.projDamage, '#ff4444');
+        Audio.sfx('rocket');
+      }
+    } else if (e.def.role === 'grenadier') {
+      if (adx > e.def.shootRange) e.vx = e.face * e.def.speed;
+      else if (adx < 150) e.vx = -e.face * e.def.speed;
+      else e.vx *= 0.8;
+      if (e.attackCd <= 0 && adx < e.def.shootRange) {
+        e.attackCd = e.def.attackCd; e.state = 'throw';
+        var gx = centerX(e), gy = centerY(e);
+        var pdx = centerX(player) - gx;
+        var throwVx = Math.sign(pdx) * 200;
+        var throwVy = -260;
+        world.grenades.push({ x: gx, y: gy, w: 8, h: 8, vx: throwVx, vy: throwVy, life: 2.5, enemy: true });
+        Audio.sfx('itemdrop');
       }
     }
-    if (hasUnique('bloodmoon') && opts.crit && Math.random() < 0.18) spawnDrop(centerX(enemy), enemy.y - 12, 'hp', 1);
+
+    e.vy += GRAVITY * dt;
+    e.x += e.vx * dt; e.y += e.vy * dt;
+    if (e.y + e.h >= GROUND_Y) { e.y = GROUND_Y - e.h; e.vy = 0; }
+    e.x = clamp(e.x, 0, world.width);
+  }
+
+  function updateTank(t, dt) {
+    t.face = centerX(player) < centerX(t) ? -1 : 1;
+    var dx = Math.abs(centerX(player) - centerX(t));
+    if (dx > 250) t.x += t.face * t.def.speed * dt;
+    if (t.attackCd <= 0 && dx < t.def.shootRange) {
+      t.attackCd = t.def.attackCd;
+      var ang = Math.atan2(centerY(player) - centerY(t), centerX(player) - centerX(t));
+      spawnEnemyBullet(centerX(t) + t.face * 40, centerY(t) - 10, Math.cos(ang) * t.def.projSpeed, Math.sin(ang) * t.def.projSpeed, t.def.projDamage, '#ff4444');
+      Audio.sfx('heavy');
+      world.shake = Math.max(world.shake, 3);
+      for (var i = 0; i < 4; i++) spawnEnemyBullet(centerX(t) + t.face * 30, centerY(t) - 10, t.face * (200 + i * 50), -20 - i * 10, 8, '#ffaa44');
+    }
+    if (overlap(t, player) && !player.dead) hurtPlayer(t.def.damage);
+  }
+
+  /* ===== 보스 ===== */
+  function spawnBoss(stageId) {
+    var def = MS.BOSSES[stageId];
+    if (!def) return;
+    world.boss = {
+      def: def, x: world.width - 200, y: GROUND_Y - def.h,
+      w: def.w, h: def.h, vx: 0, vy: 0,
+      hp: def.hp, maxHp: def.hp, face: -1,
+      phase: 0, attackCd: 2.0, state: 'idle', stateT: 0,
+      dead: false, hitFlash: 0, animT: 0, score: def.score,
+    };
+    world.bossWarn = 2.0;
+    toast('WARNING: ' + def.name, '#ff5e5e');
+    Audio.sfx('bosswarn');
+  }
+
+  function bossPhase(def, hpRatio) {
+    var p = 0;
+    for (var i = def.phases.length - 1; i >= 0; i--) { if (hpRatio <= def.phases[i].hpPct) { p = i; break; } }
+    return p;
+  }
+
+  function damageBoss(b, dmg) {
+    if (b.dead) return;
+    b.hp -= dmg;
+    b.hitFlash = 0.08;
+    if (b.hp <= 0) { killBoss(b); return; }
+    var ratio = b.hp / b.maxHp;
+    var np = bossPhase(b.def, ratio);
+    if (np !== b.phase) {
+      b.phase = np;
+      world.shake = Math.max(world.shake, 6);
+      screenFlash('#ff0000', 0.15);
+      toast(b.def.name + ' — PHASE ' + (np + 1), '#ff5e5e');
+      Audio.sfx('enrage');
+    }
+  }
+
+  function killBoss(b) {
+    b.dead = true;
+    world.score += b.def.score;
+    world.bossKilled = true;
+    world.shake = 15;
+    screenFlash('#ffffff', 0.4);
+    explodeAt(centerX(b), centerY(b), 120, '#ffe066');
+    for (var i = 0; i < 5; i++) {
+      setTimeout(function (bx, by) { explodeAt(bx + (Math.random() - 0.5) * 80, by + (Math.random() - 0.5) * 80, 50, '#ff6a2a'); }, i * 200, centerX(b), centerY(b));
+    }
+    Audio.sfx('heavy');
+    addFloat(centerX(b), b.y - 20, '+' + fmt(b.def.score), '#ffe066', 18);
+    setTimeout(function () { completeStage(); }, 1500);
+  }
+
+  function updateBoss(b, dt) {
+    if (b.dead) return;
+    if (b.hitFlash > 0) b.hitFlash -= dt;
+    b.animT += dt;
+    if (world.bossWarn > 0) { world.bossWarn -= dt; return; }
+
+    b.face = centerX(player) < centerX(b) ? -1 : 1;
+    var phaseDef = b.def.phases[b.phase];
+    b.attackCd -= dt;
+    b.stateT += dt;
+
+    var dx = centerX(player) - centerX(b);
+    var adx = Math.abs(dx);
+
+    if (b.def.id === 'assault_tank') {
+      if (adx > 300) b.x += b.face * 35 * dt;
+      if (b.attackCd <= 0) {
+        b.attackCd = phaseDef.atkCd;
+        var pat = phaseDef.pattern[Math.floor(Math.random() * phaseDef.pattern.length)];
+        if (pat === 'cannon') {
+          spawnEnemyBullet(centerX(b) + b.face * 40, centerY(b) - 10, b.face * 300, -50, 35, '#ff4444');
+          Audio.sfx('heavy'); world.shake = 4;
+        } else if (pat === 'mg') {
+          for (var i = 0; i < 5; i++) spawnEnemyBullet(centerX(b) + b.face * 30, centerY(b) - 10, b.face * (250 + i * 40), -10 - i * 5, 8, '#ffaa44');
+          Audio.sfx('mg');
+        } else if (pat === 'charge') { b.vx = b.face * 180; setTimeout(function () { b.vx = 0; }, 800); }
+      }
+      b.x += b.vx * dt; b.vx *= 0.92;
+      if (overlap(b, player) && !player.dead) hurtPlayer(30);
+    } else if (b.def.id === 'gunship') {
+      b.y = 160 + Math.sin(b.animT * 1.5) * 40;
+      b.x += (world.cameraX + VIEW_W - 200 - centerX(b)) * 0.5 * dt;
+      if (b.attackCd <= 0) {
+        b.attackCd = phaseDef.atkCd;
+        var gp = phaseDef.pattern[Math.floor(Math.random() * phaseDef.pattern.length)];
+        if (gp === 'missiles') {
+          for (var mi = 0; mi < 3; mi++) {
+            var mang = Math.atan2(centerY(player) - centerY(b), centerX(player) - centerX(b) - 100 + mi * 100);
+            spawnEnemyBullet(centerX(b), centerY(b), Math.cos(mang) * 220, Math.sin(mang) * 220, 25, '#ff4444');
+          }
+          Audio.sfx('rocket');
+        } else if (gp === 'chainGun') {
+          for (var ci = 0; ci < 8; ci++) spawnEnemyBullet(centerX(b), centerY(b), (centerX(player) - centerX(b)) / Math.abs(centerX(player) - centerX(b)) * (200 + ci * 30), (centerY(player) - centerY(b)) * 0.3 + ci * 5, 10, '#ffaa44');
+          Audio.sfx('mg');
+        } else if (gp === 'bombs') {
+          for (var bi = 0; bi < 4; bi++) world.grenades.push({ x: centerX(b) + bi * 30 - 45, y: centerY(b), w: 8, h: 8, vx: (Math.random() - 0.5) * 80, vy: 50, life: 3, enemy: true });
+        }
+      }
+    } else if (b.def.id === 'walker') {
+      b.x += Math.sign(dx) * 30 * dt;
+      b.y = GROUND_Y - b.h + Math.sin(b.animT * 4) * 4;
+      if (b.attackCd <= 0) {
+        b.attackCd = phaseDef.atkCd;
+        var wp = phaseDef.pattern[Math.floor(Math.random() * phaseDef.pattern.length)];
+        if (wp === 'stomp') { world.shake = 8; addDust(centerX(b), GROUND_Y, 12); Audio.sfx('heavy'); }
+        else if (wp === 'cannon') { spawnEnemyBullet(centerX(b) + b.face * 30, centerY(b), b.face * 300, 0, 30, '#ff4444'); Audio.sfx('rocket'); }
+        else if (wp === 'missiles') { for (var wi = 0; wi < 4; wi++) spawnEnemyBullet(centerX(b), centerY(b), (wi - 1.5) * 80, -180, 20, '#ff8844'); Audio.sfx('rocket'); }
+      }
+      if (overlap(b, player) && !player.dead) hurtPlayer(25);
+    } else if (b.def.id === 'fortress') {
+      if (b.attackCd <= 0) {
+        b.attackCd = phaseDef.atkCd;
+        var fp = phaseDef.pattern[Math.floor(Math.random() * phaseDef.pattern.length)];
+        if (fp === 'twinCannon') { spawnEnemyBullet(centerX(b) - 30, centerY(b), -280, 0, 25, '#ff4444'); spawnEnemyBullet(centerX(b) + 30, centerY(b), 280, 0, 25, '#ff4444'); Audio.sfx('heavy'); }
+        else if (fp === 'flameWall') { for (var fwi = 0; fwi < 6; fwi++) spawnEnemyBullet(centerX(b), centerY(b), (fwi - 2.5) * 60, -120, 12, '#ff6a2a'); Audio.sfx('flame'); }
+        else if (fp === 'laserSweep') { for (var li = 0; li < 10; li++) spawnEnemyBullet(centerX(b), centerY(b), b.face * (100 + li * 30), (li - 5) * 15, 15, '#5cdbff'); Audio.sfx('laser'); }
+      }
+    } else if (b.def.id === 'commander') {
+      if (adx > 200) b.x += b.face * 80 * dt;
+      else if (adx < 120) b.x -= b.face * 60 * dt;
+      b.y = GROUND_Y - b.h;
+      if (b.attackCd <= 0) {
+        b.attackCd = phaseDef.atkCd;
+        var cp = phaseDef.pattern[Math.floor(Math.random() * phaseDef.pattern.length)];
+        if (cp === 'pistolVolley') { for (var pvi = 0; pvi < 3; pvi++) spawnEnemyBullet(centerX(b) + b.face * 20, centerY(b) - 10, b.face * 400, -30 + pvi * 30, 15, '#ff8844'); Audio.sfx('shotgun'); }
+        else if (cp === 'summon') { for (var si = 0; si < 3; si++) { var ne = spawnEnemy('grunt', centerX(b) + (Math.random() - 0.5) * 100); if (ne) world.enemies.push(ne); } Audio.sfx('enemydie'); }
+        else if (cp === 'dash') { b.vx = b.face * 400; setTimeout(function () { b.vx = 0; }, 400); world.shake = 5; }
+        else if (cp === 'megaSlash') { if (overlap(b, player)) hurtPlayer(40); explodeAt(centerX(b) + b.face * 60, centerY(b), 60, '#ff5e5e'); Audio.sfx('heavy'); }
+        else if (cp === 'rage') { world.shake = 10; screenFlash('#ff0000', 0.2); for (var ri = 0; ri < 12; ri++) spawnEnemyBullet(centerX(b), centerY(b), Math.cos(ri / 12 * Math.PI * 2) * 200, Math.sin(ri / 12 * Math.PI * 2) * 200, 12, '#ff5e5e'); Audio.sfx('enrage'); }
+      }
+      b.x += b.vx * dt; b.vx *= 0.9;
+    }
+  }
+
+  /* ===== 스테이지 관리 ===== */
+  function startStage(stageId) {
+    selectedStage = stageId;
+    state = STATE.BRIEF;
+    stateT = 0;
+    Audio.sfx('menu');
+  }
+
+  function beginPlay() {
+    var stage = MS.STAGES[selectedStage];
+    world = {
+      stage: stage, stageId: selectedStage,
+      width: stage.width, rng: MS.makeRng('stage:' + selectedStage + ':' + Date.now()),
+      cameraX: 0, shake: 0, elapsed: 0,
+      enemies: [], bullets: [], rockets: [], flames: [], grenades: [],
+      particles: [], effects: [], floats: [], pickups: [],
+      kills: 0, prisoners: 0, prisonerTotal: stage.prisoners,
+      score: 0, spawnIdx: 0, bossSpawned: false, bossKilled: false,
+      boss: null, bossWarn: 0, hitFlag: false, finished: false,
+    };
+    player = createPlayer();
+    state = STATE.PLAY;
+    stateT = 0;
+
+    for (var i = 0; i < stage.spawns.length; i++) {
+      var sp = stage.spawns[i];
+      world.pickups.push({ x: -9999, y: 0, w: 0, h: 0, _spawn: sp });
+    }
+    for (var p = 0; p < stage.pickups.length; p++) {
+      var pk = stage.pickups[p];
+      world.pickups.push({ x: pk.x, y: GROUND_Y - 24, w: 24, h: 20, weapon: pk.weapon, vy: 0, life: -1, bob: 0 });
+    }
+    for (var pr = 0; pr < stage.prisoners; pr++) {
+      var px = 300 + pr * (stage.width - 500) / stage.prisoners + Math.random() * 100;
+      world.pickups.push({ x: px, y: GROUND_Y - 28, w: 16, h: 28, type: 'pow', vy: 0, life: -1, bob: 0, rescued: false });
+    }
+
+    Audio.musicStart(selectedStage < 4 ? (selectedStage < 2 ? 0 : 1) : 2);
+    toast(stage.subtitle, stage.theme.accent);
+  }
+
+  function updateSpawns(dt) {
+    if (!world || world.finished) return;
+    var stage = world.stage;
+    var camRight = world.cameraX + VIEW_W;
+
+    while (world.spawnIdx < stage.spawns.length && stage.spawns[world.spawnIdx].x < camRight + 100) {
+      var sp = stage.spawns[world.spawnIdx];
+      for (var c = 0; c < sp.count; c++) {
+        var sx = sp.x + c * 35 + Math.random() * 20;
+        var e = spawnEnemy(sp.type, sx);
+        if (e) {
+          if (e.def.miniboss) world.shake = Math.max(world.shake, 4);
+          world.enemies.push(e);
+        }
+      }
+      world.spawnIdx++;
+    }
+
+    if (!world.bossSpawned && world.spawnIdx >= stage.spawns.length && world.kills >= stage.spawns.reduce(function (s, sp) { return s + sp.count; }, 0) * 0.6) {
+      world.bossSpawned = true;
+      spawnBoss(world.stageId);
+    }
+  }
+
+  function updatePickups(dt) {
+    for (var i = world.pickups.length - 1; i >= 0; i--) {
+      var p = world.pickups[i];
+      if (p._spawn) continue;
+      if (p.life > 0) { p.life -= dt; if (p.life <= 0) { world.pickups.splice(i, 1); continue; } }
+      p.bob = (p.bob || 0) + dt;
+      if (p.vy) { p.y += p.vy * dt; p.vy += 600 * dt; if (p.y + p.h >= GROUND_Y - 4) { p.y = GROUND_Y - p.h - 4; p.vy *= -0.4; if (Math.abs(p.vy) < 20) p.vy = 0; } }
+
+      if (player && !player.dead && overlap(p, player)) {
+        if (p.weapon) {
+          var wpn = MS.WEAPONS[p.weapon];
+          player.weapon = p.weapon;
+          player.weaponAmmo = wpn.ammo;
+          toast(wpn.name + ' 획득!', wpn.color);
+          addFloat(centerX(player), player.y - 16, wpn.letter, wpn.color, 16);
+          Audio.sfx('powerup');
+          world.pickups.splice(i, 1);
+        } else if (p.type === 'grenade') {
+          player.grenades += p.count || 3;
+          toast('수류탄 +' + (p.count || 3), '#ffe066');
+          Audio.sfx('itempick');
+          world.pickups.splice(i, 1);
+        } else if (p.type === 'pow' && !p.rescued) {
+          p.rescued = true;
+          world.prisoners++;
+          world.score += 500;
+          addFloat(p.x, p.y - 8, 'POW +500', '#74e79a', 12);
+          Audio.sfx('oneup');
+          world.pickups.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  function updateCamera(dt) {
+    if (!world || !player) return;
+    var target = player.x + player.w / 2 - VIEW_W * 0.35;
+    world.cameraX += (target - world.cameraX) * 5 * dt;
+    world.cameraX = clamp(world.cameraX, 0, world.width - VIEW_W);
+    if (player.x < world.cameraX) player.x = world.cameraX;
+    if (player.x + player.w > world.cameraX + VIEW_W) player.x = world.cameraX + VIEW_W - player.w;
+  }
+
+  function updatePlay(dt) {
+    if (!world || !player) return;
+    world.elapsed += dt;
+    updatePlayer(dt);
+    if (state !== STATE.PLAY) return;
+    updateCamera(dt);
+    updateSpawns(dt);
+    for (var i = 0; i < world.enemies.length; i++) updateEnemy(world.enemies[i], dt);
+    if (world.boss) updateBoss(world.boss, dt);
+    updateProjectiles(dt);
+    updatePickups(dt);
+    updateParticles(dt);
+    world.enemies = world.enemies.filter(function (e) { return !e.dead || e.animT < 1.5; });
+  }
+
+  function completeStage() {
+    if (world.finished) return;
+    world.finished = true;
+    var timeRemaining = Math.max(0, world.stage.timeLimit - world.elapsed);
+    var score = MS.calcStageScore({
+      kills: world.kills, prisoners: world.prisoners,
+      timeRemaining: timeRemaining, noHit: !world.hitFlag,
+      grenadesLeft: player ? player.grenades : 0,
+    });
+    world.score += score;
+    var grade = MS.scoreGrade(world.score);
+    world._grade = grade;
+    world._timeBonus = Math.floor(timeRemaining * 10);
+    world._noHit = !world.hitFlag;
+
+    MS.unlockNextStage(save, world.stageId);
+    MS.recordStageResult(save, world.stageId, world.score, grade, world.kills, world.prisoners);
+    saveData();
+
+    if (world.stageId >= MS.TOTAL_STAGES - 1) { state = STATE.WIN; }
+    else { state = STATE.CLEAR; }
+    stateT = 0;
+    Audio.musicStop();
+    Audio.sfx('flag');
+  }
+
+  function gameOver() {
+    state = STATE.OVER;
+    stateT = 0;
+    Audio.musicStop();
+    Audio.sfx('die');
+  }
+
+  function nextStage() {
+    if (selectedStage + 1 < MS.TOTAL_STAGES && selectedStage + 1 < save.unlockedStages) {
+      selectedStage++;
+      startStage(selectedStage);
+    } else {
+      goTitle();
+    }
+  }
+
+  function retryStage() { startStage(selectedStage); }

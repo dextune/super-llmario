@@ -2,7 +2,7 @@
   "name": "super-qwen-rpg-2",
   "version": "2.0.0",
   "private": true,
-  "description": "Browser action RPG with town, quests, loot, skill trees and six campaign regions",
+  "description": "Metal Strike — browser arcade run & gun with weapon pickups, 5 stages, bosses and POW rescue",
   "scripts": {
     "assemble": "node scripts/assemble-sources.js",
     "test": "node tests/rpg2-core.test.js && node tests/rpg2-smoke.test.js",

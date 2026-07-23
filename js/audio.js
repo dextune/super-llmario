@@ -93,6 +93,14 @@ const AudioSys = (() => {
     freeze() { [1568, 1319, 988].forEach((f, i) => tone({ type: 'sine', f, t: 0.12, v: 0.12, at: i * 0.06 })); noise({ t: 0.2, v: 0.08, f: 3000, at: 0.05 }); },
     burn() { noise({ t: 0.1, v: 0.08, f: 1500 }); tone({ type: 'sawtooth', f: 220, f2: 120, t: 0.08, v: 0.07 }); },
     shock() { tone({ type: 'square', f: 1800, f2: 300, t: 0.07, v: 0.12 }); noise({ t: 0.05, v: 0.1, f: 9000 }); },
+    // Metal Strike 무기 효과음
+    shoot() { tone({ type: 'square', f: 720, f2: 280, t: 0.05, v: 0.10 }); noise({ t: 0.03, v: 0.06, f: 3000 }); },
+    mg() { tone({ type: 'square', f: 600 + Math.random() * 80, f2: 240, t: 0.035, v: 0.07 }); noise({ t: 0.02, v: 0.04, f: 4000 }); },
+    shotgun() { noise({ t: 0.14, v: 0.28, f: 1200 }); tone({ type: 'sawtooth', f: 180, f2: 60, t: 0.1, v: 0.16 }); },
+    rocket() { tone({ type: 'sawtooth', f: 120, f2: 380, t: 0.25, v: 0.14 }); noise({ t: 0.2, v: 0.08, f: 600 }); },
+    flame() { noise({ t: 0.06, v: 0.06, f: 800 }); tone({ type: 'sawtooth', f: 140, f2: 80, t: 0.05, v: 0.04 }); },
+    laser() { tone({ type: 'sine', f: 1800, f2: 600, t: 0.06, v: 0.10 }); tone({ type: 'square', f: 1200, f2: 400, t: 0.04, v: 0.06, at: 0.01 }); },
+    menu() { tone({ f: 880, t: 0.04, v: 0.08 }); tone({ f: 1320, t: 0.06, v: 0.08, at: 0.04 }); },
   };
 
   // 테마별 BGM — 8분음표 멜로디 + 베이스

@@ -5,7 +5,7 @@
  * This loader joins them in manifest order, verifies SHA-256 when Web Crypto is
  * available, then evaluates core before the browser runtime.
  */
-(async function bootstrapRPG2(root) {
+(async function bootstrapMetalStrike(root) {
   const MANIFEST_URL = 'js/source-manifest.json';
 
   function setBootState(value) {
@@ -16,6 +16,20 @@
     console.error('[SUPER QWEN RPG 2] bootstrap failed', error);
     setBootState('error');
     if (typeof document === 'undefined') return;
+    const cvs = document.getElementById('game');
+    if (cvs) {
+      const ctx = cvs.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#0b101d'; ctx.fillRect(0, 0, cvs.width, cvs.height);
+        ctx.fillStyle = '#e52521'; ctx.font = '14px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('BOOT FAILED', cvs.width / 2, cvs.height / 2 - 40);
+        ctx.fillStyle = '#dfe6f5'; ctx.font = '11px monospace';
+        ctx.fillText(String(error.message || error).substring(0, 60), cvs.width / 2, cvs.height / 2);
+        ctx.fillStyle = '#fbd000'; ctx.font = '12px monospace';
+        ctx.fillText('정적 웹 서버로 실행하세요: npx http-server -p 8080 -c-1', cvs.width / 2, cvs.height / 2 + 40);
+        ctx.textAlign = 'left';
+      }
+    }
     const feature = document.querySelector('.title-feature');
     if (feature) feature.textContent = '게임 소스를 불러오지 못했습니다. 정적 웹 서버로 실행했는지 확인하십시오.';
   }
@@ -53,13 +67,13 @@
   try {
     setBootState('loading');
     const manifest = JSON.parse(await getText(MANIFEST_URL));
-    const coreSource = await assemble(manifest['rpg2-core.js']);
-    (0, eval)(coreSource + '\n//# sourceURL=rpg2-core.js');
-    if (!root.RPG2) throw new Error('RPG2 도메인 모듈 초기화 실패');
+    const coreSource = await assemble(manifest['ms-core.js']);
+    (0, eval)(coreSource + '\n//# sourceURL=ms-core.js');
+    if (!root.MS) throw new Error('MS 도메인 모듈 초기화 실패');
 
-    const gameSource = await assemble(manifest['rpg2-game.js']);
-    (0, eval)(gameSource + '\n//# sourceURL=rpg2-game.js');
-    if (!root.SuperLLMarioRPG2) throw new Error('RPG2 게임 런타임 초기화 실패');
+    const gameSource = await assemble(manifest['ms-game.js']);
+    (0, eval)(gameSource + '\n//# sourceURL=ms-game.js');
+    if (!root.MetalStrike) throw new Error('Metal Strike 런타임 초기화 실패');
     setBootState('ready');
   } catch (error) {
     report(error);

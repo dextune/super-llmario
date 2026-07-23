@@ -1,226 +1,119 @@
 'use strict';
 
-/* SUPER QWEN RPG 2 — 브라우저 런타임
- * RPG2 도메인 계층 위에 거점/필드/상점/강화/스킬/퀘스트/저장 흐름을 조립한다.
+/* METAL STRIKE — 브라우저 런앤건 런타임
+ * MS 도메인 계층 위에 스테이지 선택 → 런앤건 → 보스 → 클리어 흐름을 조립한다.
  */
-(function bootSuperLLMario(root) {
-  const RPG = root.RPG2;
-  if (!RPG || typeof document === 'undefined') return;
+(function bootMetalStrike(root) {
+  var MS = root.MS;
+  if (!MS || typeof document === 'undefined') return;
 
-  const SAVE_KEY = 'super-llmario-rpg2-save-v2';
-  const STATE = Object.freeze({
-    TITLE: 'title', CLASS: 'class', HUB: 'hub', FIELD: 'field', PAUSED: 'paused',
-    SHOP: 'shop', FORGE: 'forge', SKILLS: 'skills', QUESTS: 'quests', INVENTORY: 'inventory',
-    CLEAR: 'clear', WIN: 'win', OVER: 'over',
+  var SAVE_KEY = MS.SAVE_KEY;
+  var STATE = Object.freeze({
+    TITLE: 'title', SELECT: 'select', BRIEF: 'brief',
+    PLAY: 'play', PAUSED: 'paused', CLEAR: 'clear',
+    OVER: 'over', WIN: 'win',
   });
-  const VIEW_W = 960, VIEW_H = 624, GROUND_Y = 520;
-  const $ = id => document.getElementById(id);
-  const cvs = $('game');
+  var VIEW_W = 960, VIEW_H = 624, GROUND_Y = 540;
+  var GRAVITY = 1500;
+  var $ = function (id) { return document.getElementById(id); };
+  var cvs = $('game');
   if (!cvs || !cvs.getContext) return;
-  const g = cvs.getContext('2d');
+  var g = cvs.getContext('2d');
   if (!g) return;
   g.imageSmoothingEnabled = false;
 
-  const Audio = (typeof AudioSys !== 'undefined' ? AudioSys : root.AudioSys) || {
-    ensure() {}, sfx() {}, musicStart() {}, musicStop() {},
-    toggle() { return false; },
+  var Audio = (typeof AudioSys !== 'undefined' ? AudioSys : root.AudioSys) || {
+    ensure: function () {}, sfx: function () {}, musicStart: function () {},
+    musicStop: function () {}, toggle: function () { return false; },
   };
 
-  const overlays = {
-    title: $('ov-title'), class: $('ov-class'), hub: $('ov-hub'), shop: $('ov-shop'),
-    forge: $('ov-forge'), skills: $('ov-skills'), quests: $('ov-quests'), inventory: $('ov-inventory'),
-    pause: $('ov-pause'), clear: $('ov-clear'), win: $('ov-win'), over: $('ov-over'),
-  };
+  /* ===== 글로벌 상태 ===== */
+  var state = STATE.TITLE;
+  var save = MS.createSave();
+  var world = null;
+  var player = null;
+  var selectedStage = 0;
+  var rafId = 0;
+  var lastTime = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+  var titleT = 0;
+  var stateT = 0;
+  var flashT = 0;
+  var flashColor = '#ffffff';
+  var toastT = 0;
+  var toastText = '';
+  var toastColor = '#ffffff';
 
-  let state = STATE.TITLE;
-  let resumeState = STATE.HUB;
-  let profile = null;
-  let stats = null;
-  let world = null;
-  let player = null;
-  let currentShop = [];
-  let forgeSelection = null;
-  let inventorySelection = null;
-  let lastTime = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-  let accSave = 0;
-  let toastTimer = 0;
-  let toastText = '';
-  let toastColor = '#ffffff';
-  let titleT = 0;
-  let rafId = 0;
-  const input = { left: false, right: false, jump: false, run: false };
+  /* ===== 입력 ===== */
+  var keys = {};
+  var input = { left: false, right: false, up: false, down: false, jump: false, fire: false, run: false };
+  var firePressed = false;
+  var grenadePressed = false;
+  var pausePressed = false;
 
+  function onKeyDown(e) {
+    if (keys[e.code]) return;
+    keys[e.code] = true;
+    Audio.ensure();
+    var c = e.code;
+
+    if (state === STATE.TITLE) {
+      if (c === 'Enter' || c === 'Space') { goSelect(); e.preventDefault(); return; }
+    } else if (state === STATE.SELECT) {
+      if (c === 'Enter' || c === 'Space') { startStage(selectedStage); e.preventDefault(); return; }
+      if (c === 'ArrowLeft' || c === 'KeyA') { selectedStage = Math.max(0, selectedStage - 1); Audio.sfx('menu'); e.preventDefault(); return; }
+      if (c === 'ArrowRight' || c === 'KeyD') { selectedStage = Math.min(save.unlockedStages - 1, selectedStage + 1); Audio.sfx('menu'); e.preventDefault(); return; }
+    } else if (state === STATE.BRIEF) {
+      if (c === 'Enter' || c === 'Space') { beginPlay(); e.preventDefault(); return; }
+    } else if (state === STATE.PLAY) {
+      if (c === 'KeyP' || c === 'Escape') { state = STATE.PAUSED; Audio.musicStop(); e.preventDefault(); return; }
+      if (c === 'KeyK') grenadePressed = true;
+    } else if (state === STATE.PAUSED) {
+      if (c === 'KeyP' || c === 'Escape') { state = STATE.PLAY; Audio.musicStart(); e.preventDefault(); return; }
+      if (c === 'KeyQ') { state = STATE.TITLE; titleT = 0; Audio.musicStop(); e.preventDefault(); return; }
+    } else if (state === STATE.CLEAR) {
+      if (c === 'Enter' || c === 'Space') { nextStage(); e.preventDefault(); return; }
+    } else if (state === STATE.OVER) {
+      if (c === 'Enter' || c === 'Space') { retryStage(); e.preventDefault(); return; }
+      if (c === 'KeyQ') { state = STATE.TITLE; titleT = 0; e.preventDefault(); return; }
+    } else if (state === STATE.WIN) {
+      if (c === 'Enter' || c === 'Space') { state = STATE.TITLE; titleT = 0; e.preventDefault(); return; }
+    }
+
+    if (c === 'Space' || c === 'ArrowUp' || c === 'KeyW') input.jump = true;
+    if (c === 'ArrowLeft' || c === 'KeyA') input.left = true;
+    if (c === 'ArrowRight' || c === 'KeyD') input.right = true;
+    if (c === 'ArrowDown' || c === 'KeyS') input.down = true;
+    if (c === 'KeyJ') { input.fire = true; firePressed = true; }
+    if (c === 'ShiftLeft' || c === 'ShiftRight') input.run = true;
+    if (e.code === 'Space' || c.indexOf('Arrow') === 0) e.preventDefault();
+  }
+
+  function onKeyUp(e) {
+    keys[e.code] = false;
+    var c = e.code;
+    if (c === 'Space' || c === 'ArrowUp' || c === 'KeyW') input.jump = false;
+    if (c === 'ArrowLeft' || c === 'KeyA') input.left = false;
+    if (c === 'ArrowRight' || c === 'KeyD') input.right = false;
+    if (c === 'ArrowDown' || c === 'KeyS') input.down = false;
+    if (c === 'KeyJ') input.fire = false;
+    if (c === 'ShiftLeft' || c === 'ShiftRight') input.run = false;
+  }
+
+  /* ===== 유틸 ===== */
   function nowMs() { return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now(); }
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
   function overlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
   function centerX(o) { return o.x + o.w / 2; }
   function centerY(o) { return o.y + o.h / 2; }
-  function fmt(n) { return Math.floor(n).toLocaleString('ko-KR'); }
-  function esc(value) {
-    return String(value == null ? '' : value)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-  }
+  function dist(a, b) { return Math.hypot(centerX(a) - centerX(b), centerY(a) - centerY(b)); }
+  function fmt(n) { return MS.formatScore(n); }
 
-  function showOverlay(name) {
-    for (const [key, el] of Object.entries(overlays)) {
-      if (el && el.classList) el.classList.toggle('show', key === name);
-    }
-  }
+  function toast(text, color) { toastText = text; toastColor = color || '#ffffff'; toastT = 2.5; }
+  function screenFlash(color, dur) { flashColor = color; flashT = dur || 0.15; }
 
-  function setState(next, overlayName) {
-    state = next;
-    showOverlay(overlayName == null ? null : overlayName);
-  }
+  /* ===== 세이브 ===== */
+  function loadSaveData() { var s = MS.loadSave(); return s || MS.createSave(); }
+  function saveData() { MS.saveSave(save); }
 
-  function toast(text, color) {
-    toastText = text;
-    toastColor = color || '#ffffff';
-    toastTimer = 2.8;
-  }
-
-  function sfx(name) {
-    try { Audio.ensure(); Audio.sfx(name); } catch (_) { /* optional audio */ }
-  }
-
-  function saveProfile(silent) {
-    if (!profile || typeof localStorage === 'undefined') return false;
-    try {
-      localStorage.setItem(SAVE_KEY, RPG.serializeProfile(profile, Date.now()));
-      if (!silent) toast('모험 기록을 저장했습니다.', '#7dff9f');
-      updateContinueButton();
-      return true;
-    } catch (error) {
-      if (!silent) toast('저장에 실패했습니다: ' + error.message, '#ff7d7d');
-      return false;
-    }
-  }
-
-  function loadProfile() {
-    if (typeof localStorage === 'undefined') return null;
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
-    const parsed = RPG.parseProfile(raw);
-    return parsed.ok ? parsed.profile : null;
-  }
-
-  function updateContinueButton() {
-    const btn = $('btn-continue');
-    if (!btn) return;
-    const saved = loadProfile();
-    btn.disabled = !saved;
-    btn.textContent = saved ? '이어하기 · LV ' + saved.level + ' ' + RPG.CLASS_DEFS[saved.classId].name : '이어하기 · 저장 없음';
-  }
-
-  function deleteSave() {
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(SAVE_KEY);
-    profile = null; stats = null; world = null; player = null;
-    updateContinueButton();
-    setState(STATE.TITLE, 'title');
-  }
-
-  function statSummary() {
-    if (!profile) return '';
-    stats = RPG.deriveStats(profile);
-    return [
-      '<b>LV ' + profile.level + ' ' + esc(RPG.CLASS_DEFS[profile.classId].name) + '</b>',
-      'HP ' + stats.maxHp + ' · MP ' + stats.maxMp,
-      '공격 ' + stats.attack + ' · 방어 ' + stats.armor + ' · 치명 ' + stats.crit + '%',
-      '골드 ' + fmt(profile.gold) + 'G · 재료 ' + fmt(profile.materials),
-    ].join('<br>');
-  }
-
-  function itemStatsHtml(item) {
-    if (!item) return '<span class="rpg-dim">비어 있음</span>';
-    const names = {
-      attack: '공격', armor: '방어', maxHp: '생명', maxMp: '마나', crit: '치명타',
-      movePct: '이동속도', attackPct: '공격%', skillDamagePct: '스킬피해', cooldownPct: '재사용',
-      leech: '흡혈', dodge: '회피', fireDamage: '화염', frostDamage: '서리',
-      primaryDamagePct: '주력기피해', primaryRangePct: '주력기범위',
-    };
-    const lines = Object.entries(item.stats || {}).map(([key, value]) => {
-      const pct = /Pct$/.test(key) || ['crit', 'leech', 'dodge'].includes(key);
-      return '<span>' + esc(names[key] || key) + ' ' + (value >= 0 ? '+' : '') + esc(value) + (pct ? '%' : '') + '</span>';
-    });
-    if (item.uniqueEffect) lines.push('<em>' + esc(item.uniqueEffect) + '</em>');
-    return lines.join('<br>');
-  }
-
-  function itemCard(item, options) {
-    const opts = options || {};
-    if (!item) return '<div class="rpg-item empty"><span>비어 있음</span></div>';
-    const score = RPG.itemScore(item, profile.classId);
-    const selected = opts.selected ? ' selected' : '';
-    return '<button class="rpg-item' + selected + '" data-action="' + esc(opts.action || '') + '" data-index="' + esc(opts.index == null ? '' : opts.index) + '" data-slot="' + esc(opts.slot || '') + '" style="--rarity:' + RPG.RARITIES[item.rarity].color + '">' +
-      '<strong>' + esc(item.name) + (item.upgrade ? ' +' + item.upgrade : '') + '</strong>' +
-      '<small>' + esc(RPG.SLOT_NAMES[item.slot]) + ' · ' + esc(RPG.RARITIES[item.rarity].name) + ' · 전투력 ' + score + '</small>' +
-      '<span class="rpg-item-stats">' + itemStatsHtml(item) + '</span>' +
-      '</button>';
-  }
-
-  function renderClassSelect() {
-    const host = $('class-list');
-    if (!host) return;
-    host.innerHTML = Object.values(RPG.CLASS_DEFS).map(cls =>
-      '<button class="class-card" data-action="choose-class" data-class="' + cls.id + '" style="--class-color:' + cls.color + '">' +
-      '<span class="class-icon">' + cls.icon + '</span><strong>' + esc(cls.name) + '</strong><p>' + esc(cls.description) + '</p>' +
-      '<small>K ' + esc(cls.abilities[1].name) + ' · L ' + esc(cls.abilities[2].name) + '</small></button>'
-    ).join('');
-  }
-
-  function renderHub() {
-    if (!profile) return;
-    stats = RPG.deriveStats(profile);
-    const summary = $('hub-summary');
-    if (summary) summary.innerHTML = statSummary();
-    const claimable = RPG.QUESTS.filter(q => profile.quests[q.id] && profile.quests[q.id].complete && !profile.quests[q.id].claimed).length;
-    const questBadge = $('hub-quest-badge');
-    if (questBadge) questBadge.textContent = claimable ? String(claimable) : '';
-    const stageHost = $('stage-list');
-    if (stageHost) {
-      stageHost.innerHTML = RPG.STAGES.map((stage, i) => {
-        const locked = i > profile.unlockedStage;
-        const best = profile.stageBest[stage.id];
-        const stars = best ? '★'.repeat(best.stars) + '☆'.repeat(3 - best.stars) : '☆☆☆';
-        return '<button class="stage-card" data-action="start-stage" data-stage="' + i + '" ' + (locked ? 'disabled' : '') + ' style="--stage-accent:' + stage.theme.accent + '">' +
-          '<strong>' + esc(stage.name) + '</strong><span>' + esc(stage.subtitle) + '</span>' +
-          '<small>' + esc(stage.objective) + '</small><b>' + (locked ? '잠김' : stars) + '</b></button>';
-      }).join('');
-    }
-    const win = $('hub-win');
-    if (win) win.hidden = !profile.won;
-  }
-
-  function enterHub(message) {
-    if (!profile) return;
-    world = null; player = null; stats = RPG.deriveStats(profile);
-    try { Audio.musicStop(); } catch (_) {}
-    setState(STATE.HUB, 'hub');
-    renderHub();
-    if (message) toast(message, '#ffd86a');
-    saveProfile(true);
-  }
-
-  function startNew(classId) {
-    profile = RPG.createProfile(classId, Date.now());
-    stats = RPG.deriveStats(profile);
-    saveProfile(true);
-    enterHub('새로운 모험이 시작되었습니다.');
-  }
-
-  function continueGame() {
-    const loaded = loadProfile();
-    if (!loaded) { toast('불러올 저장 기록이 없습니다.', '#ff8b8b'); return; }
-    profile = loaded;
-    stats = RPG.deriveStats(profile);
-    enterHub('저장된 모험을 불러왔습니다.');
-  }
-
-  function renderShop() {
-    if (!profile) return;
-    currentShop = RPG.getShopStock(profile);
-    const wallet = $('shop-wallet');
-    if (wallet) wallet.textContent = fmt(profile.gold) + 'G · 재료 ' + fmt(profile.materials);
-    const host = $('shop-list');
-    if (host) host.innerHTML = currentShop.map((entry, i) => {
-      if (entry.kind === 'gear') {
+  function goSelect() { state = STATE.SELECT; stateT = 0; selectedStage = 0; Audio.sfx('menu'); }
+  function goTitle() { state = STATE.TITLE; titleT = 0; Audio.musicStop(); }

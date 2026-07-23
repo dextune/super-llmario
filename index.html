@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="거점, 스킬 트리, 장비 파밍, 퀘스트와 6개 지역을 갖춘 브라우저 액션 RPG">
-  <title>SUPER QWEN RPG 2 — 액션 RPG</title>
+  <meta name="description" content="메탈 슬러그 스타일 횡스크롤 런앤건 — 3병과 · 총기 · 6개 작전 지역">
+  <title>METAL STRIKE — RUN & GUN</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -19,147 +19,36 @@
     <header class="marquee">
       <span class="led" aria-hidden="true"></span>
       <h1 class="logo">
-        <span class="logo__super">SUPER</span>
-        <span class="logo__qwen">QWEN</span>
-        <span class="logo__bros">RPG 2</span>
+        <span class="logo__super">METAL</span>
+        <span class="logo__qwen">STRIKE</span>
       </h1>
-      <p class="tag">ACTION RPG · TOWN · QUESTS · LOOT · 6 REGIONS</p>
+      <p class="tag">RUN & GUN · 3 CLASSES · 6 OPERATIONS</p>
       <button id="btn-sound" class="snd" type="button">SOUND ON</button>
     </header>
 
     <div class="screen">
       <canvas id="game" width="960" height="624" aria-label="SUPER QWEN RPG 게임 화면"></canvas>
       <div class="fx-scan" aria-hidden="true"></div>
-
-      <section class="overlay show" id="ov-title" aria-label="타이틀">
-        <div class="title-wrap rpg-title-wrap">
-          <div class="coins" aria-hidden="true"><i class="pcoin"></i><i class="pcoin pcoin--d"></i></div>
-          <h2 class="title-logo">SUPER<br><b>QWEN</b> RPG 2</h2>
-          <p class="kr sub">전투와 전리품이 마을의 다음 선택으로 이어지는 액션 RPG</p>
-          <div class="title-actions">
-            <button type="button" data-action="new-game">새 모험</button>
-            <button type="button" id="btn-continue" data-action="continue">이어하기 · 저장 없음</button>
-          </div>
-          <p class="title-feature">직업 3종 · 스킬 트리 · 상점/대장간 · 퀘스트 · 엘리트 · 보스 3단계 · 자동 저장</p>
-          <p class="credit">FAN-MADE TRIBUTE · 교육용 비상업 데모</p>
-        </div>
-      </section>
-
-      <section class="overlay rpg-overlay" id="ov-class" aria-label="직업 선택">
-        <div class="rpg-panel compact">
-          <div class="rpg-panel-head"><div><span>NEW ADVENTURE</span><h2>직업 선택</h2></div><button data-action="to-title">닫기</button></div>
-          <p class="rpg-lead">직업은 기본 능력치와 J/K/L 전투 기술, 전용 스킬 트리를 결정합니다.</p>
-          <div class="class-list" id="class-list"></div>
-        </div>
-      </section>
-
-      <section class="overlay rpg-overlay" id="ov-hub" aria-label="새벽 마을">
-        <div class="rpg-panel hub-panel">
-          <div class="rpg-panel-head">
-            <div><span>SAFE HAVEN</span><h2>새벽 마을</h2></div>
-            <div class="head-actions"><button data-action="save">저장</button><button data-action="to-title">타이틀</button></div>
-          </div>
-          <div class="hub-grid">
-            <aside class="hub-sidebar">
-              <div class="summary-card" id="hub-summary"></div>
-              <nav class="hub-menu" aria-label="마을 시설">
-                <button data-action="open-shop"><b>상점</b><span>장비와 물약 구매</span></button>
-                <button data-action="open-forge"><b>대장간</b><span>강화와 옵션 재련</span></button>
-                <button data-action="open-skills"><b>스킬 성소</b><span>전용 특성 투자</span></button>
-                <button data-action="open-quests"><b>퀘스트 게시판</b><span id="hub-quest-badge" class="badge"></span>현상금 보상</button>
-                <button data-action="open-inventory"><b>장비와 가방</b><span>착용·판매·분해</span></button>
-              </nav>
-            </aside>
-            <section class="stage-section">
-              <div id="hub-win" class="victory-banner" hidden>마왕을 쓰러뜨렸습니다. 모든 지역을 자유롭게 재도전할 수 있습니다.</div>
-              <h3>지역 선택</h3>
-              <div class="stage-list" id="stage-list"></div>
-            </section>
-          </div>
-        </div>
-      </section>
-
-      <section class="overlay rpg-overlay" id="ov-shop" aria-label="상점">
-        <div class="rpg-panel">
-          <div class="rpg-panel-head"><div><span>MERCHANT</span><h2>모험가 상점</h2></div><div class="head-actions"><b id="shop-wallet"></b><button data-action="back-hub">마을</button></div></div>
-          <p class="rpg-lead">판매 목록은 캐릭터 레벨에 맞춰 생성됩니다. 교체 비용은 점차 증가합니다.</p>
-          <div class="shop-list" id="shop-list"></div>
-          <div class="panel-footer"><button id="btn-shop-refresh" data-action="refresh-shop">상품 교체</button></div>
-        </div>
-      </section>
-
-      <section class="overlay rpg-overlay" id="ov-forge" aria-label="대장간">
-        <div class="rpg-panel">
-          <div class="rpg-panel-head"><div><span>BLACKSMITH</span><h2>룬 대장간</h2></div><div class="head-actions"><b id="forge-wallet"></b><button data-action="back-hub">마을</button></div></div>
-          <div class="forge-layout">
-            <div class="forge-items" id="forge-items"></div>
-            <div class="forge-detail" id="forge-detail"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="overlay rpg-overlay" id="ov-skills" aria-label="스킬 트리">
-        <div class="rpg-panel">
-          <div class="rpg-panel-head"><div><span>SKILL SHRINE</span><h2 id="skill-class">스킬 트리</h2></div><div class="head-actions"><b id="skill-points"></b><button data-action="back-hub">마을</button></div></div>
-          <div class="ability-summary" id="ability-summary"></div>
-          <div class="skill-tree" id="skill-tree"></div>
-        </div>
-      </section>
-
-      <section class="overlay rpg-overlay" id="ov-quests" aria-label="퀘스트">
-        <div class="rpg-panel">
-          <div class="rpg-panel-head"><div><span>BOUNTY BOARD</span><h2>퀘스트 게시판</h2></div><button data-action="back-hub">마을</button></div>
-          <p class="rpg-lead">모든 현상금은 자동 추적됩니다. 조건을 달성한 뒤 직접 보상을 수령하십시오.</p>
-          <div class="quest-list" id="quest-list"></div>
-        </div>
-      </section>
-
-      <section class="overlay rpg-overlay" id="ov-inventory" aria-label="장비와 가방">
-        <div class="rpg-panel inventory-panel">
-          <div class="rpg-panel-head"><div><span>CHARACTER</span><h2>장비 · 능력치 · 가방 <small id="inventory-cap"></small></h2></div><button data-action="close-panel">닫기</button></div>
-          <div class="inventory-layout">
-            <aside id="inventory-summary" class="summary-card"></aside>
-            <section><h3>착용 장비</h3><div id="inventory-equipped" class="equipped-grid"></div></section>
-            <section><h3>가방</h3><div id="inventory-bag" class="inventory-bag"></div></section>
-            <aside id="inventory-detail" class="inventory-detail"></aside>
-          </div>
-        </div>
-      </section>
-
-      <section class="overlay" id="ov-pause" aria-label="일시정지">
-        <div class="panel"><h2>PAUSE</h2><p class="kr">전투가 일시정지되었습니다.</p><button class="panel-button" data-action="resume">계속</button><button class="panel-button" data-action="open-inventory">가방</button><button class="panel-button" data-action="over-hub">마을 귀환</button></div>
-      </section>
-
-      <section class="overlay" id="ov-clear" aria-label="스테이지 완료">
-        <div class="panel panel--gold result-panel"><h2 id="clear-title">STAGE CLEAR</h2><div id="clear-stars" class="result-stars">★★★</div><p id="clear-rewards" class="kr"></p><button class="panel-button" data-action="clear-hub">마을로 귀환</button></div>
-      </section>
-
-      <section class="overlay" id="ov-win" aria-label="게임 완료">
-        <div class="panel panel--gold result-panel"><h2>CAMPAIGN CLEAR!</h2><div class="result-stars">♛</div><p class="kr">쿠파 대왕의 세 전투 단계를 돌파했습니다.<br>마을에서 빌드를 완성하고 모든 지역의 3성을 노리십시오.</p><button class="panel-button" data-action="win-hub">영웅의 귀환</button></div>
-      </section>
-
-      <section class="overlay" id="ov-over" aria-label="스테이지 실패">
-        <div class="panel panel--red result-panel"><h2>DEFEATED</h2><p id="over-reason" class="kr"></p><p class="score-line">REMAINING GOLD <span id="over-score">0</span></p><button class="panel-button" data-action="retry-stage">재도전</button><button class="panel-button" data-action="over-hub">마을 귀환</button></div>
-      </section>
     </div>
 
     <footer class="legend kr">
       <span class="chip"><kbd>A</kbd><kbd>D</kbd> 이동</span>
+      <span class="chip"><kbd>SHIFT</kbd> 달리기</span>
       <span class="chip"><kbd>SPACE</kbd> 점프</span>
-      <span class="chip"><kbd>J</kbd> 기본 공격</span>
-      <span class="chip"><kbd>K</kbd><kbd>L</kbd> 직업 기술</span>
-      <span class="chip"><kbd>Q</kbd><kbd>E</kbd> 물약</span>
-      <span class="chip"><kbd>I</kbd> 가방</span>
-      <span class="chip"><kbd>P</kbd> 일시정지</span>
+      <span class="chip"><kbd>S</kbd> 앉기</span>
+      <span class="chip"><kbd>J</kbd> 사격</span>
+      <span class="chip"><kbd>K</kbd> 수류탄</span>
+      <span class="chip"><kbd>↑</kbd> 올려쏘기</span>
+      <span class="chip"><kbd>P</kbd> 정지</span>
     </footer>
   </main>
 
   <div class="touchpad" aria-label="터치 조작">
     <div class="tp-dir"><button id="tb-left" class="tbtn" type="button">◀</button><button id="tb-right" class="tbtn" type="button">▶</button></div>
     <div class="tp-act">
-      <button id="tb-pot" class="tbtn tbtn--pot" type="button">Q</button>
-      <button id="tb-secondary" class="tbtn tbtn--heavy" type="button">L</button>
-      <button id="tb-primary" class="tbtn tbtn--b" type="button">K</button>
+      <button id="tb-pot" class="tbtn tbtn--pot" type="button">K</button>
+      <button id="tb-secondary" class="tbtn tbtn--heavy" type="button">↓</button>
+      <button id="tb-primary" class="tbtn tbtn--b" type="button">↑</button>
       <button id="tb-atk" class="tbtn tbtn--atk" type="button">J</button>
       <button id="tb-jump" class="tbtn tbtn--a" type="button">▲</button>
       <button id="tb-run" class="tbtn tbtn--run" type="button">»</button>
@@ -167,6 +56,7 @@
   </div>
 
   <script src="js/audio.js"></script>
+  <script src="js/sprites.js"></script>
   <script src="js/bootstrap.js"></script>
 </body>
 </html>
