@@ -1,0 +1,172 @@
+/* SUPER QWEN RPG 2 — 메타 게임 UI */
+:root {
+  --rpg-bg: #090e19;
+  --rpg-panel: #111a2c;
+  --rpg-panel-2: #17243c;
+  --rpg-line: #334464;
+  --rpg-text: #e7edf9;
+  --rpg-dim: #8f9dbc;
+  --rpg-gold: #ffe066;
+  --rpg-good: #74e79a;
+  --rpg-bad: #ff7979;
+}
+
+button { font-family: var(--kr); }
+.screen { min-height: 0; }
+.overlay { overflow: hidden; }
+.rpg-overlay { align-items: stretch; justify-content: stretch; padding: 8px; background: rgba(3, 7, 15, .9); }
+.rpg-panel {
+  width: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+  text-align: left; color: var(--rpg-text); background: linear-gradient(145deg, rgba(17,26,44,.98), rgba(9,14,25,.98));
+  border: 3px solid var(--rpg-gold); border-radius: 10px; box-shadow: 0 0 0 3px #050910, 0 20px 50px #000;
+}
+.rpg-panel.compact { max-width: 900px; margin: auto; align-self: center; min-height: auto; }
+.rpg-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: #0a1120; border-bottom: 2px solid var(--rpg-line); }
+.rpg-panel-head span { display: block; margin-bottom: 5px; font-family: var(--px); font-size: 7px; color: var(--rpg-dim); letter-spacing: .12em; }
+.rpg-panel-head h2 { margin: 0; font-family: var(--px); font-size: clamp(13px, 2.2vw, 19px); color: var(--rpg-gold); }
+.rpg-panel-head h2 small { font-family: var(--kr); font-size: 11px; color: var(--rpg-dim); }
+.rpg-panel-head button, .head-actions button, .panel-footer button, .title-actions button, .panel-button,
+.forge-detail button, .shop-entry > button, .quest-entry button, .inventory-actions button, .stat-alloc button {
+  color: var(--rpg-text); background: #1c2942; border: 2px solid #465a7e; border-radius: 6px; padding: 8px 11px; cursor: pointer;
+  font-weight: 800; transition: transform .1s, background .12s, border-color .12s;
+}
+.rpg-panel-head button:hover, .head-actions button:hover, .panel-footer button:hover, .title-actions button:hover, .panel-button:hover,
+.forge-detail button:hover, .shop-entry > button:hover, .quest-entry button:hover, .inventory-actions button:hover, .stat-alloc button:hover {
+  transform: translateY(-1px); color: #121827; background: var(--rpg-gold); border-color: var(--rpg-gold);
+}
+button:disabled { cursor: not-allowed !important; opacity: .42; transform: none !important; }
+.head-actions { display: flex; align-items: center; gap: 8px; }
+.head-actions b { color: var(--rpg-gold); white-space: nowrap; }
+.rpg-lead { padding: 10px 16px 0; color: #b8c5df; font-size: 12px; font-weight: 650; }
+.rpg-dim { color: var(--rpg-dim); }
+.good { color: var(--rpg-good); }
+.bad { color: var(--rpg-bad); }
+
+.rpg-title-wrap { width: min(740px, 94%); padding: 28px; border-radius: 12px; background: rgba(5,9,18,.76); border: 2px solid rgba(255,224,102,.3); }
+.title-actions { display: flex; justify-content: center; gap: 12px; margin-top: 22px; }
+.title-actions button { min-width: 190px; font-family: var(--px); font-size: 10px; padding: 13px 16px; }
+.title-feature { margin-top: 15px; font-size: 11px; line-height: 1.6; color: #94a6ca; }
+
+.class-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 18px; }
+.class-card {
+  min-height: 245px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 18px;
+  color: var(--rpg-text); background: linear-gradient(160deg, #17233a, #0c1424); border: 3px solid var(--class-color); border-radius: 10px; cursor: pointer;
+}
+.class-card:hover { transform: translateY(-3px); box-shadow: 0 10px 26px rgba(0,0,0,.4), 0 0 18px color-mix(in srgb, var(--class-color), transparent 55%); }
+.class-card .class-icon { font-size: 44px; color: var(--class-color); }
+.class-card strong { font-family: var(--px); font-size: 13px; color: var(--class-color); }
+.class-card p { font-size: 13px; line-height: 1.55; text-align: center; color: #c2cce1; }
+.class-card small { color: var(--rpg-gold); text-align: center; }
+
+.hub-grid { display: grid; grid-template-columns: 250px 1fr; gap: 12px; padding: 12px; min-height: 0; flex: 1; }
+.hub-sidebar { display: flex; min-height: 0; flex-direction: column; gap: 10px; }
+.summary-card { padding: 12px; color: #d8e2f5; background: #0c1424; border: 2px solid var(--rpg-line); border-radius: 8px; font-size: 12px; line-height: 1.65; }
+.summary-card b { color: var(--rpg-gold); }
+.hub-menu { display: grid; gap: 7px; overflow: auto; }
+.hub-menu button { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; color: var(--rpg-text); background: #152139; border: 2px solid #334867; border-radius: 7px; cursor: pointer; }
+.hub-menu button:hover { border-color: var(--rpg-gold); background: #1d2d49; }
+.hub-menu button b { color: #fff; font-size: 13px; }
+.hub-menu button span { color: var(--rpg-dim); font-size: 10px; }
+.badge { position: absolute; right: 8px; top: 8px; min-width: 20px; min-height: 20px; display: grid !important; place-items: center; color: #111 !important; background: var(--rpg-gold); border-radius: 50%; font-weight: 900; }
+.stage-section { min-width: 0; overflow: auto; padding: 2px; }
+.stage-section h3 { margin: 4px 0 10px; font-family: var(--px); font-size: 11px; color: #dce6fa; }
+.stage-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.stage-card { position: relative; min-height: 116px; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 12px; color: var(--rpg-text); text-align: left; background: linear-gradient(135deg, #17233a, #0b1322); border: 2px solid var(--stage-accent); border-radius: 8px; cursor: pointer; }
+.stage-card:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 9px 24px rgba(0,0,0,.35); }
+.stage-card strong { color: var(--stage-accent); font-size: 14px; }
+.stage-card span { color: #d8e2f3; font-weight: 700; }
+.stage-card small { color: var(--rpg-dim); line-height: 1.35; }
+.stage-card b { position: absolute; right: 10px; bottom: 9px; color: var(--rpg-gold); letter-spacing: 2px; }
+.victory-banner { margin-bottom: 10px; padding: 9px 12px; color: #ffe89b; background: rgba(255,224,102,.09); border: 1px solid rgba(255,224,102,.45); border-radius: 6px; font-weight: 800; }
+
+.shop-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 12px; overflow: auto; flex: 1; }
+.shop-entry { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.shop-entry .rpg-item { flex: 1; }
+.shop-entry.consumable { min-height: 150px; justify-content: center; padding: 14px; background: #121d31; border: 2px solid #395071; border-radius: 8px; }
+.shop-entry.consumable strong { color: #9bd1ff; }
+.shop-entry.consumable span { color: var(--rpg-dim); }
+.panel-footer { display: flex; justify-content: center; padding: 10px; border-top: 2px solid var(--rpg-line); }
+
+.rpg-item { min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 9px; color: var(--rpg-text); text-align: left; background: #0d1728; border: 2px solid var(--rarity, #344663); border-radius: 7px; cursor: pointer; }
+.rpg-item:hover, .rpg-item.selected { background: #172640; box-shadow: inset 0 0 0 1px var(--rarity, #fff); }
+.rpg-item.empty { cursor: default; justify-content: center; color: var(--rpg-dim); border-color: #2f3e58; }
+.rpg-item strong { color: var(--rarity, #fff); line-height: 1.25; }
+.rpg-item small { color: var(--rpg-dim); font-size: 9px; }
+.rpg-item-stats { color: #b8c8e6; font-size: 10px; line-height: 1.35; }
+.rpg-item-stats em { color: #ffb56a; font-style: normal; }
+
+.forge-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; padding: 12px; min-height: 0; flex: 1; }
+.forge-items { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; align-content: start; overflow: auto; }
+.forge-detail { padding: 14px; background: #0c1424; border: 2px solid #344a6b; border-radius: 8px; overflow: auto; }
+.forge-detail h3 { margin-bottom: 10px; }
+.forge-detail p { color: #c7d4eb; font-size: 12px; line-height: 1.55; }
+.forge-detail button { width: 100%; margin-top: 9px; }
+
+.ability-summary { display: flex; flex-wrap: wrap; gap: 9px; padding: 10px 14px; border-bottom: 1px solid var(--rpg-line); }
+.ability-summary span { padding: 7px 9px; color: #b9c9e5; background: #0c1424; border-radius: 6px; font-size: 11px; }
+.skill-tree { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 14px; overflow: auto; }
+.skill-node { min-height: 126px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px; color: var(--rpg-text); text-align: left; background: linear-gradient(145deg, #17243c, #0c1526); border: 2px solid #536990; border-radius: 8px; cursor: pointer; }
+.skill-node:hover:not(:disabled) { border-color: var(--rpg-gold); transform: translateY(-2px); }
+.skill-node strong { color: var(--rpg-gold); }
+.skill-node strong b { color: #fff; }
+.skill-node span { color: #c1cce1; line-height: 1.45; }
+.skill-node small { color: var(--rpg-dim); }
+
+.quest-list { display: grid; gap: 8px; padding: 14px; overflow: auto; }
+.quest-entry { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px; background: #111d31; border: 2px solid #344a6b; border-radius: 8px; }
+.quest-entry.complete { border-color: var(--rpg-gold); }
+.quest-entry div { display: flex; flex-direction: column; gap: 4px; }
+.quest-entry strong { color: #fff; }
+.quest-entry span { color: #c4cfe3; }
+.quest-entry small { color: var(--rpg-dim); }
+.quest-entry button { min-width: 105px; }
+
+.inventory-panel { max-width: none; }
+.inventory-layout { display: grid; grid-template-columns: 190px 260px 1fr 220px; gap: 9px; padding: 10px; overflow: hidden; min-height: 0; flex: 1; }
+.inventory-layout > * { min-width: 0; overflow: auto; }
+.inventory-layout h3 { margin-bottom: 7px; font-family: var(--px); font-size: 9px; color: #cdd9ed; }
+.equipped-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.equip-slot label { display: block; margin-bottom: 3px; color: var(--rpg-dim); font-size: 9px; }
+.equip-slot .rpg-item { min-height: 105px; }
+.inventory-bag { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; align-content: start; }
+.inventory-detail { padding: 12px; background: #0b1424; border: 2px solid #344a6b; border-radius: 7px; }
+.inventory-detail h3 { font-size: 14px; }
+.inventory-detail p { margin: 8px 0; color: #c6d2e7; line-height: 1.5; font-size: 11px; }
+.inventory-actions { display: grid; gap: 6px; }
+.stat-alloc { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 8px; }
+.stat-alloc button { padding: 5px; font-size: 10px; }
+
+.result-panel { min-width: min(620px, 90%); }
+.result-stars { margin: 16px 0; color: var(--rpg-gold); font-family: var(--px); font-size: 28px; letter-spacing: 8px; }
+.panel-button { margin: 14px 4px 0; }
+
+@media (max-width: 820px) {
+  .class-list { grid-template-columns: 1fr; max-height: 500px; overflow: auto; }
+  .class-card { min-height: 180px; }
+  .hub-grid { grid-template-columns: 210px 1fr; }
+  .stage-list { grid-template-columns: 1fr; }
+  .shop-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .skill-tree { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-layout { grid-template-columns: 170px 220px 1fr; }
+  .inventory-detail { grid-column: 1 / -1; max-height: 180px; }
+}
+
+@media (max-width: 620px) {
+  .rpg-overlay { padding: 3px; }
+  .rpg-panel-head { padding: 8px; }
+  .rpg-panel-head h2 { font-size: 12px; }
+  .head-actions b { display: none; }
+  .hub-grid { grid-template-columns: 1fr; overflow: auto; }
+  .hub-sidebar { overflow: visible; }
+  .hub-menu { grid-template-columns: 1fr 1fr; overflow: visible; }
+  .stage-section { overflow: visible; }
+  .forge-layout { grid-template-columns: 1fr; overflow: auto; }
+  .forge-items { overflow: visible; grid-template-columns: repeat(2, 1fr); }
+  .skill-tree { grid-template-columns: 1fr; }
+  .quest-entry { align-items: stretch; flex-direction: column; }
+  .inventory-layout { display: block; overflow: auto; }
+  .inventory-layout > * { margin-bottom: 10px; overflow: visible; }
+  .inventory-bag { grid-template-columns: repeat(2, 1fr); }
+  .title-actions { flex-direction: column; align-items: center; }
+  .title-actions button { width: 100%; }
+}
