@@ -1,11 +1,11 @@
 {
   "name": "super-qwen-rpg-2",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
-  "description": "Metal Strike — browser arcade run & gun with weapon pickups, 5 stages, bosses and POW rescue",
+  "description": "Metal Strike RPG Overdrive — browser arcade run & gun with progression, style combat and bosses",
   "scripts": {
     "assemble": "node scripts/assemble-sources.js",
-    "test": "node tests/rpg2-core.test.js && node tests/rpg2-smoke.test.js",
+    "test": "node tests/rpg2-core.test.js && node tests/rpg2-smoke.test.js && node tests/overdrive.test.js",
     "check": "node scripts/assemble-sources.js --check && npm test"
   },
   "engines": {
