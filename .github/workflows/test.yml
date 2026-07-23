@@ -1,4 +1,4 @@
-name: test
+name: test-and-package
 
 on:
   push:
@@ -11,10 +11,22 @@ permissions:
 jobs:
   node-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm run check
+      - name: Verify and test
+        run: npm run check
+      - name: Build source archive
+        if: github.event_name == 'push'
+        run: zip -r super-qwen-rpg2-source.zip . -x '.git/*' 'super-qwen-rpg2-source.zip'
+      - name: Upload source archive
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: super-qwen-rpg2-source
+          path: super-qwen-rpg2-source.zip
+          retention-days: 7
+          if-no-files-found: error
