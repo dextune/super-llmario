@@ -1,30 +1,32 @@
-# SUPER QWEN RPG 2
+# METAL STRIKE — RPG OVERDRIVE
 
-브라우저에서 실행되는 팬메이드 횡스크롤 액션 RPG입니다. 기존 직선형 스테이지 구조를 **마을 거점, 직업별 빌드, 장비 경제, 퀘스트, 지역 목표, 엘리트와 3단계 보스**가 연결된 캠페인으로 확장했습니다.
+브라우저에서 실행되는 팬메이드 횡스크롤 런앤건 RPG입니다. 기존 Metal Strike 캠페인에 메탈슬러그식 즉각적인 타격감과 장기 성장 요소를 결합했습니다.
 
-## 주요 기능
+## 이번 고도화 핵심
 
-- 선봉대, 비전술사, 척후병 3개 직업
-- 직업별 J/K/L 기술과 6노드 스킬 트리
-- 상점, 대장간, 스킬 성소, 퀘스트 게시판, 인벤토리
-- 장비 희귀도, 옵션, 유일 효과, 강화 +7, 재련, 판매, 분해
-- 서로 다른 목표와 환경 규칙을 가진 6개 지역
-- 방패, 원거리, 회복, 돌진, 소환 등 역할 기반 적
-- 6종 엘리트 속성과 3단계 최종 보스
-- 버전 관리되는 localStorage 자동 저장
-- 외부 런타임 의존성 없는 Node 테스트
+### 그래픽
 
-상세 설계와 완료 기준은 [`docs/RPG_EXPANSION_PLAN.md`](docs/RPG_EXPANSION_PLAN.md)를 참고하십시오.
+- 다층 전장 실루엣, 폐허, 탐조등, 잔해를 추가한 전장 배경
+- 엘리트 적 전용 오라와 속성 표식
+- 치명타 방사형 임팩트, 근접 베기 궤적, 충격파, 화면 비네팅
+- 오버드라이브 속도선, 저체력 위험 연출, 카메라 킥
+- 아케이드 캐비닛과 CRT 화면 스타일 개선
 
-## 실행
+### 콘텐츠와 RPG
 
-브라우저 부트스트랩이 소스 조각을 불러오므로 `file://`이 아니라 정적 웹 서버로 저장소 루트를 제공해야 합니다.
+- 전투 XP와 영구 레벨 성장
+- 레벨에 따른 화력, 최대 체력, 치명타, 연사, 근접 공격 성장
+- BERSERK, ARMORED, RAPID, VAMP 엘리트 변이
+- 콤보와 D/C/B/A/S 스타일 랭크, 점수 배율
+- 체력이 낮은 일반 적을 근접 공격으로 처형
+- 전투 게이지 100%에서 7초간 오버드라이브 발동
 
-```bash
-python -m http.server 8000
-```
+### 타격감과 사운드
 
-브라우저에서 `http://localhost:8000`을 엽니다.
+- 일반 피격, 치명타, 약점, 처치, 엘리트 처치별 히트스톱
+- 무기 반동 기반 화면 흔들림과 순간 카메라 킥
+- 피격 숫자, CRIT 표기, 확대 임팩트 링
+- WebAudio 압축기 기반 총기, 폭발, 칼날, 랭크 상승, 레벨업 사운드 레이어
 
 ## 조작
 
@@ -32,51 +34,52 @@ python -m http.server 8000
 |---|---|
 | A/D 또는 ←/→ | 이동 |
 | Shift | 달리기 |
-| Space/W/↑ | 점프 |
-| J | 기본 공격 |
-| K | 직업 주력기 |
-| L | 직업 보조기 |
-| Q / E | 체력 / 마나 물약 |
-| I | 장비와 가방 |
-| P / Escape | 일시정지 |
+| Space/W/↑ | 점프 또는 위 조준 |
+| S/↓ | 앉기 |
+| J | 사격 |
+| K | 수류탄 |
+| L | 근접 공격 및 처형 |
+| E | 오버드라이브 발동 |
+| P/Escape | 일시정지 |
 
-마우스 좌클릭은 기본 공격, 우클릭은 주력기입니다. 모바일에서는 화면 하단 터치 패드를 사용합니다.
+## 실행
+
+브라우저 부트스트랩이 소스 조각을 불러오므로 정적 웹 서버가 필요합니다.
+
+```bash
+python -m http.server 8000
+```
+
+브라우저에서 `http://localhost:8000`을 여십시오.
 
 ## 테스트
 
-Node.js 18 이상에서 실행합니다. 외부 npm 패키지는 필요하지 않습니다.
+Node.js 18 이상에서 외부 npm 패키지 없이 실행됩니다.
 
 ```bash
-npm test
 npm run check
 ```
 
-테스트 구성:
-
-- `tests/rpg2-core.test.js`: 소스 무결성, 성장, 아이템, 상점, 강화, 퀘스트, 저장 단위 테스트
-- `tests/rpg2-smoke.test.js`: 실제 부트스트랩과 DOM/canvas 스텁 기반 전체 6지역 캠페인 테스트
-- `scripts/assemble-sources.js`: manifest에 따라 원본을 조립하고 바이트 길이·SHA-256·JavaScript 문법 검증
-
-배포용 단일 파일이 필요할 때 다음 명령으로 `dist/`에 조립할 수 있습니다.
-
-```bash
-npm run assemble
-```
+테스트는 원본 소스 무결성, RPG 도메인, 전체 캠페인 스모크 테스트와 Overdrive 소스 변환·문법·멱등성을 검증합니다.
 
 ## 구조
 
 ```text
-index.html                    RPG 2 화면과 오버레이
-css/rpg2.css                  RPG 메타 UI
-js/bootstrap.js               브라우저 소스 조립·무결성 검증
-js/source-manifest.json       소스 순서·크기·SHA-256
-js/core.parts/*.part          순수 RPG 도메인 로직 원본
-js/game.parts/*.part          게임 상태·전투·UI·저장 런타임 원본
-scripts/assemble-sources.js   Node 조립·검증 도구
-tests/                        단위·전체 캠페인 테스트
+index.html                    게임 화면과 조작 안내
+css/style.css                 기본 아케이드 UI
+css/rpg2.css                  기존 RPG UI 호환 스타일
+css/overdrive.css             Overdrive 그래픽 고도화
+js/audio.js                   기본 WebAudio 시스템
+js/sprites.js                 픽셀 스프라이트 렌더러
+js/overdrive-audio.js         총기·폭발·근접 전용 사운드 레이어
+js/overdrive-runtime.js       RPG·타격감·그래픽 런타임
+js/overdrive.js               검증형 런타임 패치 적용기
+js/bootstrap.js               소스 무결성 검증 및 런타임 패치 적용
+js/core.parts/*.part          순수 게임 도메인
+js/game.parts/*.part          기본 런앤건 런타임
+scripts/assemble-sources.js   소스 조립 및 검증
+tests/                        단위·스모크·Overdrive 테스트
 ```
-
-기존 버전의 소스는 비교와 참고를 위해 보존되어 있습니다. 현재 `index.html`은 RPG 2 부트스트랩을 실행합니다.
 
 ## 고지
 

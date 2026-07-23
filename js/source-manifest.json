@@ -5,8 +5,8 @@
       "js/core.parts/02.part",
       "js/core.parts/03.part"
     ],
-    "bytes": 18984,
-    "sha256": "d1f239c852701d12d731a92687dd27cdf174f36944bf1988696a49f760b30597",
+    "bytes": 18495,
+    "sha256": "16c1111165868c47fa074af4f332a62e563d81ae92d314f08db9065c73e75f4f",
     "part_count": 3
   },
   "ms-game.js": {
@@ -17,8 +17,8 @@
       "js/game.parts/04.part",
       "js/game.parts/05.part"
     ],
-    "bytes": 70149,
-    "sha256": "cb41e09185a7ba25fac53333d38c94f0d41f3ff7dc76942f897d2929da2b81b8",
+    "bytes": 68473,
+    "sha256": "f217b2f7846896d98f3b812b4cfe754beb21ec5c1247098dafa846aa1ca6522f",
     "part_count": 5
   }
 }
