@@ -20,6 +20,15 @@ jobs:
         id: verify
         shell: bash
         run: |
+          node - <<'NODE' | tee source-metrics.log
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const manifest = JSON.parse(fs.readFileSync('js/source-manifest.json', 'utf8'));
+          for (const [name, entry] of Object.entries(manifest)) {
+            const source = entry.parts.map(path => fs.readFileSync(path, 'utf8')).join('');
+            console.log(name, Buffer.byteLength(source, 'utf8'), crypto.createHash('sha256').update(source, 'utf8').digest('hex'));
+          }
+          NODE
           set +e
           npm run check 2>&1 | tee overdrive-ci.log
           status=${PIPESTATUS[0]}
@@ -30,5 +39,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: overdrive-ci-log
-          path: overdrive-ci.log
+          path: |
+            overdrive-ci.log
+            source-metrics.log
           if-no-files-found: error
