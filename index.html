@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="메탈 슬러그 스타일 횡스크롤 런앤건 — 3병과 · 총기 · 6개 작전 지역">
-  <title>METAL STRIKE — RUN & GUN</title>
+  <meta name="description" content="메탈슬러그 감성의 횡스크롤 런앤건 RPG — 콤보, 레벨, 엘리트, 오버드라이브 전투">
+  <title>METAL STRIKE — RPG OVERDRIVE</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/rpg2.css">
+  <link rel="stylesheet" href="css/overdrive.css">
 </head>
 <body>
   <div class="sky-stars" aria-hidden="true"></div>
@@ -22,12 +23,12 @@
         <span class="logo__super">METAL</span>
         <span class="logo__qwen">STRIKE</span>
       </h1>
-      <p class="tag">RUN & GUN · 3 CLASSES · 6 OPERATIONS</p>
+      <p class="tag">RUN & GUN · RPG BUILD · IMPACT COMBAT</p>
       <button id="btn-sound" class="snd" type="button">SOUND ON</button>
     </header>
 
     <div class="screen">
-      <canvas id="game" width="960" height="624" aria-label="SUPER QWEN RPG 게임 화면"></canvas>
+      <canvas id="game" width="960" height="624" aria-label="METAL STRIKE RPG OVERDRIVE 게임 화면"></canvas>
       <div class="fx-scan" aria-hidden="true"></div>
     </div>
 
@@ -38,6 +39,8 @@
       <span class="chip"><kbd>S</kbd> 앉기</span>
       <span class="chip"><kbd>J</kbd> 사격</span>
       <span class="chip"><kbd>K</kbd> 수류탄</span>
+      <span class="chip"><kbd>L</kbd> 근접 처형</span>
+      <span class="chip"><kbd>E</kbd> 오버드라이브</span>
       <span class="chip"><kbd>↑</kbd> 올려쏘기</span>
       <span class="chip"><kbd>P</kbd> 정지</span>
     </footer>
@@ -47,6 +50,8 @@
     <div class="tp-dir"><button id="tb-left" class="tbtn" type="button">◀</button><button id="tb-right" class="tbtn" type="button">▶</button></div>
     <div class="tp-act">
       <button id="tb-pot" class="tbtn tbtn--pot" type="button">K</button>
+      <button id="tb-melee" class="tbtn tbtn--heavy" type="button">L</button>
+      <button id="tb-overdrive" class="tbtn tbtn--b" type="button">E</button>
       <button id="tb-secondary" class="tbtn tbtn--heavy" type="button">↓</button>
       <button id="tb-primary" class="tbtn tbtn--b" type="button">↑</button>
       <button id="tb-atk" class="tbtn tbtn--atk" type="button">J</button>
@@ -57,6 +62,9 @@
 
   <script src="js/audio.js"></script>
   <script src="js/sprites.js"></script>
+  <script src="js/overdrive-audio.js"></script>
+  <script src="js/overdrive-runtime.js"></script>
+  <script src="js/overdrive.js"></script>
   <script src="js/bootstrap.js"></script>
 </body>
 </html>
