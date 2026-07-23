@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SUPER QWEN BROS. — 액션 RPG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="sky-stars" aria-hidden="true"></div>
+  <div class="sky-stars sky-stars--far" aria-hidden="true"></div>
+
+  <main class="cab">
+    <header class="marquee">
+      <span class="led" aria-hidden="true"></span>
+      <h1 class="logo">
+        <span class="logo__super">SUPER</span>
+        <span class="logo__qwen">QWEN</span>
+        <span class="logo__bros">RPG</span>
+      </h1>
+      <p class="tag">DIABLO-STYLE ACTION RPG &middot; 6 STAGES</p>
+      <button id="btn-sound" class="snd" type="button">SOUND ON</button>
+    </header>
+
+    <div class="screen">
+      <canvas id="game" width="960" height="624"></canvas>
+      <div class="fx-scan" aria-hidden="true"></div>
+
+      <section class="overlay show" id="ov-title">
+        <div class="title-wrap">
+          <div class="coins" aria-hidden="true"><i class="pcoin"></i><i class="pcoin pcoin--d"></i></div>
+          <h2 class="title-logo">SUPER<br><b>QWEN</b> RPG</h2>
+          <p class="kr sub">디아블로 스타일 액션 RPG &middot; 능력치/아이템/전리품/레벨업</p>
+          <p class="press">PRESS ENTER &mdash; 모험 시작</p>
+          <ul class="hints kr">
+            <li><kbd>&larr;</kbd><kbd>&rarr;</kbd> 이동</li>
+            <li><kbd>SPACE</kbd> 점프</li>
+            <li><kbd>J</kbd> 콤보베기</li>
+            <li><kbd>K</kbd> 강타</li>
+            <li><kbd>L</kbd> 주문</li>
+            <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 주문선택</li>
+            <li><kbd>Q</kbd> 물약</li>
+            <li><kbd>I</kbd> 가방</li>
+          </ul>
+          <p class="credit">FAN-MADE TRIBUTE &middot; 교육용 데모입니다</p>
+        </div>
+      </section>
+
+      <section class="overlay" id="ov-pause">
+        <div class="panel">
+          <h2>PAUSE</h2>
+          <p class="kr">P 를 누르면 계속됩니다</p>
+        </div>
+      </section>
+
+      <section class="overlay" id="ov-over">
+        <div class="panel panel--red">
+          <h2>GAME OVER</h2>
+          <p class="score-line">GOLD <span id="over-score">000000</span></p>
+          <p class="kr press2">ENTER &mdash; 다시 도전</p>
+        </div>
+      </section>
+
+      <section class="overlay" id="ov-clear">
+        <div class="panel panel--gold">
+          <h2>STAGE CLEAR!</h2>
+          <p class="score-line">GOLD REWARD <span id="clear-bonus">0</span></p>
+          <p class="score-line">TOTAL GOLD <span id="clear-score">000000</span></p>
+          <p class="kr press2">ENTER &mdash; 다음 스테이지</p>
+        </div>
+      </section>
+
+      <section class="overlay" id="ov-win">
+        <div class="panel panel--gold">
+          <h2>ALL CLEAR!</h2>
+          <p class="kr">6개 스테이지 + 보스 클리어! 세계를 구했습니다</p>
+          <p class="score-line">FINAL GOLD <span id="win-score">000000</span></p>
+          <p class="kr press2">ENTER &mdash; 타이틀로</p>
+        </div>
+      </section>
+
+      <section class="overlay overlay-inv" id="ov-inv">
+        <div class="inv-panel">
+          <div class="inv-head">
+            <h2>장비 / 능력치 / 가방</h2>
+            <span class="inv-close kr">I 또는 ESC 로 닫기</span>
+          </div>
+          <div class="inv-body">
+            <div class="inv-col">
+              <h3>착용 중</h3>
+              <div class="grid-equipped" id="inv-equipped"></div>
+            </div>
+            <div class="inv-col inv-col--stats">
+              <h3>능력치</h3>
+              <div class="stats" id="inv-stats"></div>
+              <div class="pots" id="inv-pots"></div>
+            </div>
+            <div class="inv-col">
+              <h3>가방 <span class="t-dim" id="inv-cap"></span></h3>
+              <div class="grid-backpack" id="inv-backpack"></div>
+            </div>
+          </div>
+          <div class="inv-tip" id="inv-tip">아이템에 마우스를 올리면 정보가 표시됩니다</div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="legend kr">
+      <span class="chip"><kbd>&larr;</kbd><kbd>&rarr;</kbd> 이동</span>
+      <span class="chip"><kbd>SPACE</kbd> 점프</span>
+      <span class="chip"><kbd>J</kbd> 콤보베기</span>
+      <span class="chip"><kbd>K</kbd> 강타</span>
+      <span class="chip"><kbd>L</kbd> 주문</span>
+      <span class="chip"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 주문선택</span>
+      <span class="chip"><kbd>Q</kbd> HP물약</span>
+      <span class="chip"><kbd>I</kbd> 가방</span>
+      <span class="chip"><kbd>P</kbd> 일시정지</span>
+      <span class="chip"><kbd>M</kbd> 사운드</span>
+    </footer>
+  </main>
+
+  <div class="touchpad" aria-hidden="true">
+    <div class="tp-dir">
+      <button id="tb-left" class="tbtn" type="button">&#9664;</button>
+      <button id="tb-right" class="tbtn" type="button">&#9654;</button>
+    </div>
+    <div class="tp-act">
+      <button id="tb-pot" class="tbtn tbtn--pot" type="button">Q</button>
+      <button id="tb-heavy" class="tbtn tbtn--heavy" type="button">K</button>
+      <button id="tb-spell" class="tbtn tbtn--b" type="button">L</button>
+      <button id="tb-atk" class="tbtn tbtn--atk" type="button">J</button>
+      <button id="tb-jump" class="tbtn tbtn--a" type="button">A</button>
+      <button id="tb-run" class="tbtn tbtn--run" type="button">▶</button>
+    </div>
+  </div>
+
+  <script src="js/rpgdata.js"></script>
+  <script src="js/levels.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/balance.js"></script>
+  <script src="js/combat.js"></script>
+  <script src="js/flow.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
