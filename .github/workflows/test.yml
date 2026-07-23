@@ -20,10 +20,8 @@ jobs:
       - name: Verify and test
         run: npm run check
       - name: Build source archive
-        if: github.event_name == 'push'
         run: zip -r super-qwen-rpg2-source.zip . -x '.git/*' 'super-qwen-rpg2-source.zip'
       - name: Upload source archive
-        if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: super-qwen-rpg2-source
