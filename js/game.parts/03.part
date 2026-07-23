@@ -15,6 +15,7 @@
       face: -1, state: 'idle', stateT: 0, animT: 0,
       attackCd: 1 + Math.random(), hitFlash: 0, dead: false,
       burn: 0, burnDps: 0, aggro: false, score: def.score,
+      _flameCd: 0,
     };
     if (def.flying) { e.y = 150 + Math.random() * 200; e.vy = 0; }
     if (def.role === 'turret') e.y = GROUND_Y - def.h;
@@ -70,6 +71,24 @@
     var adx = Math.abs(dx);
 
     if (e.def.flying) {
+      // 드론: 플레이어에게 돌진하는 자폭형
+      if (e.def.role === 'drone') {
+        e.face = dx >= 0 ? 1 : -1;
+        var ddx = centerX(player) - centerX(e);
+        var ddy = centerY(player) - centerY(e);
+        var dist = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+        e.x += (ddx / dist) * e.def.speed * dt;
+        e.y += (ddy / dist) * e.def.speed * dt;
+        e.y += Math.sin(e.animT * 12) * 1.5;
+        if (dist < e.def.attackRange + 10 && !player.dead) {
+          hurtPlayer(e.def.damage);
+          explodeAt(centerX(e), centerY(e), 30, '#ff8c42');
+          e.hp = 0; killEnemy(e);
+          return;
+        }
+        return;
+      }
+      // 건십: 기존 비행 AI
       e.stateT = (e.stateT || 0) + dt;
       e.face = dx >= 0 ? 1 : -1;
       var targetY = player.y - 60 + Math.sin(e.stateT * 2) * 40;
@@ -164,7 +183,6 @@
       var ang = Math.atan2(centerY(player) - centerY(t), centerX(player) - centerX(t));
       spawnEnemyBullet(centerX(t) + t.face * 40, centerY(t) - 10, Math.cos(ang) * t.def.projSpeed, Math.sin(ang) * t.def.projSpeed, t.def.projDamage, '#ff4444');
       Audio.sfx('heavy');
-      world.shake = Math.max(world.shake, 3);
       for (var i = 0; i < 4; i++) spawnEnemyBullet(centerX(t) + t.face * 30, centerY(t) - 10, t.face * (200 + i * 50), -20 - i * 10, 8, '#ffaa44');
     }
     if (overlap(t, player) && !player.dead) hurtPlayer(t.def.damage);
@@ -180,6 +198,7 @@
       hp: def.hp, maxHp: def.hp, face: -1,
       phase: 0, attackCd: 2.0, state: 'idle', stateT: 0,
       dead: false, hitFlash: 0, animT: 0, score: def.score,
+      _flameCd: 0,
     };
     world.bossWarn = 2.0;
     toast('WARNING: ' + def.name, '#ff5e5e');
@@ -201,7 +220,6 @@
     var np = bossPhase(b.def, ratio);
     if (np !== b.phase) {
       b.phase = np;
-      world.shake = Math.max(world.shake, 6);
       screenFlash('#ff0000', 0.15);
       toast(b.def.name + ' — PHASE ' + (np + 1), '#ff5e5e');
       Audio.sfx('enrage');
@@ -210,17 +228,28 @@
 
   function killBoss(b) {
     b.dead = true;
-    world.score += b.def.score;
+    var rushMult = world.bossRush ? (bossRushIdx + 1) : 1;
+    var bossScore = b.def.score * rushMult;
+    world.score += bossScore;
     world.bossKilled = true;
-    world.shake = 15;
     screenFlash('#ffffff', 0.4);
     explodeAt(centerX(b), centerY(b), 120, '#ffe066');
     for (var i = 0; i < 5; i++) {
       setTimeout(function (bx, by) { explodeAt(bx + (Math.random() - 0.5) * 80, by + (Math.random() - 0.5) * 80, 50, '#ff6a2a'); }, i * 200, centerX(b), centerY(b));
     }
     Audio.sfx('heavy');
-    addFloat(centerX(b), b.y - 20, '+' + fmt(b.def.score), '#ffe066', 18);
-    setTimeout(function () { completeStage(); }, 1500);
+    addFloat(centerX(b), b.y - 20, '+' + fmt(bossScore), '#ffe066', 18);
+    if (world.bossRush) {
+      bossRushScore = world.score;
+      bossRushIdx++;
+      if (bossRushIdx >= 5) {
+        setTimeout(function () { state = STATE.WIN; stateT = 0; Audio.musicStop(); toast('BOSS RUSH CLEAR! 점수: ' + fmt(bossRushScore), '#ffd76a'); }, 1500);
+      } else {
+        setTimeout(function () { beginBossRushRound(); }, 1500);
+      }
+    } else {
+      setTimeout(function () { completeStage(); }, 1500);
+    }
   }
 
   function updateBoss(b, dt) {
@@ -244,11 +273,13 @@
         var pat = phaseDef.pattern[Math.floor(Math.random() * phaseDef.pattern.length)];
         if (pat === 'cannon') {
           spawnEnemyBullet(centerX(b) + b.face * 40, centerY(b) - 10, b.face * 300, -50, 35, '#ff4444');
-          Audio.sfx('heavy'); world.shake = 4;
+          Audio.sfx('heavy');
         } else if (pat === 'mg') {
           for (var i = 0; i < 5; i++) spawnEnemyBullet(centerX(b) + b.face * 30, centerY(b) - 10, b.face * (250 + i * 40), -10 - i * 5, 8, '#ffaa44');
           Audio.sfx('mg');
         } else if (pat === 'charge') { b.vx = b.face * 180; setTimeout(function () { b.vx = 0; }, 800); }
+        else if (pat === 'mineDrop') { for (var mni = 0; mni < 3; mni++) world.grenades.push({ x: centerX(b) - b.face * (30 + mni * 40), y: centerY(b) + 20, w: 8, h: 8, vx: -b.face * 60, vy: -80, life: 4, enemy: true }); Audio.sfx('itemdrop'); }
+        else if (pat === 'slam') { b.vy = -300; setTimeout(function () { b.vy = 400; }, 300); setTimeout(function () { addDust(centerX(b), GROUND_Y, 10); damageEnemyArea(centerX(b), GROUND_Y, 100, 20); Audio.sfx('heavy'); }, 600); }
       }
       b.x += b.vx * dt; b.vx *= 0.92;
       if (overlap(b, player) && !player.dead) hurtPlayer(30);
@@ -269,6 +300,13 @@
           Audio.sfx('mg');
         } else if (gp === 'bombs') {
           for (var bi = 0; bi < 4; bi++) world.grenades.push({ x: centerX(b) + bi * 30 - 45, y: centerY(b), w: 8, h: 8, vx: (Math.random() - 0.5) * 80, vy: 50, life: 3, enemy: true });
+        } else if (gp === 'strafeRun') {
+          b.vx = -b.face * 350; setTimeout(function () { b.vx = 0; }, 1200);
+          for (var sri = 0; sri < 10; sri++) setTimeout(function () { if (!b.dead) spawnEnemyBullet(centerX(b), centerY(b) + 20, 0, 250, 12, '#ffaa44'); }, sri * 100);
+          Audio.sfx('mg');
+        } else if (gp === 'flare') {
+          for (var fli = 0; fli < 5; fli++) { var fla = Math.atan2(centerY(player) - centerY(b), centerX(player) - centerX(b)) + (fli - 2) * 0.3; spawnEnemyBullet(centerX(b), centerY(b), Math.cos(fla) * 180, Math.sin(fla) * 180, 18, '#ff6a2a'); }
+          Audio.sfx('rocket');
         }
       }
     } else if (b.def.id === 'walker') {
@@ -277,9 +315,11 @@
       if (b.attackCd <= 0) {
         b.attackCd = phaseDef.atkCd;
         var wp = phaseDef.pattern[Math.floor(Math.random() * phaseDef.pattern.length)];
-        if (wp === 'stomp') { world.shake = 8; addDust(centerX(b), GROUND_Y, 12); Audio.sfx('heavy'); }
+        if (wp === 'stomp') { addDust(centerX(b), GROUND_Y, 12); Audio.sfx('heavy'); }
         else if (wp === 'cannon') { spawnEnemyBullet(centerX(b) + b.face * 30, centerY(b), b.face * 300, 0, 30, '#ff4444'); Audio.sfx('rocket'); }
         else if (wp === 'missiles') { for (var wi = 0; wi < 4; wi++) spawnEnemyBullet(centerX(b), centerY(b), (wi - 1.5) * 80, -180, 20, '#ff8844'); Audio.sfx('rocket'); }
+        else if (wp === 'laserEye') { for (var lei = 0; lei < 12; lei++) { var la = -0.6 + lei * 0.1; spawnEnemyBullet(centerX(b) + b.face * 20, centerY(b) - 30, Math.cos(la) * b.face * 350, Math.sin(la) * 350, 14, '#5cdbff'); } Audio.sfx('laser'); }
+        else if (wp === 'groundPound') { for (var gpi = 0; gpi < 3; gpi++) setTimeout(function () { if (!b.dead) { addDust(centerX(b), GROUND_Y, 8); damageEnemyArea(centerX(b), GROUND_Y, 80, 15); for (var gpb = 0; gpb < 4; gpb++) spawnEnemyBullet(centerX(b), GROUND_Y - 10, (gpb - 1.5) * 120, -200, 12, '#ff8844'); Audio.sfx('heavy'); } }, gpi * 250); }
       }
       if (overlap(b, player) && !player.dead) hurtPlayer(25);
     } else if (b.def.id === 'fortress') {
@@ -289,6 +329,8 @@
         if (fp === 'twinCannon') { spawnEnemyBullet(centerX(b) - 30, centerY(b), -280, 0, 25, '#ff4444'); spawnEnemyBullet(centerX(b) + 30, centerY(b), 280, 0, 25, '#ff4444'); Audio.sfx('heavy'); }
         else if (fp === 'flameWall') { for (var fwi = 0; fwi < 6; fwi++) spawnEnemyBullet(centerX(b), centerY(b), (fwi - 2.5) * 60, -120, 12, '#ff6a2a'); Audio.sfx('flame'); }
         else if (fp === 'laserSweep') { for (var li = 0; li < 10; li++) spawnEnemyBullet(centerX(b), centerY(b), b.face * (100 + li * 30), (li - 5) * 15, 15, '#5cdbff'); Audio.sfx('laser'); }
+        else if (fp === 'droneSwarm') { for (var dsi = 0; dsi < 4; dsi++) { var dse = spawnEnemy('drone', centerX(b) + (Math.random() - 0.5) * 120); if (dse) { dse.y = centerY(b) - 40; dse.aggro = true; world.enemies.push(dse); } } Audio.sfx('enemydie'); }
+        else if (fp === 'shieldWall') { b.shieldUp = true; setTimeout(function () { b.shieldUp = false; }, 2500); for (var swi = 0; swi < 8; swi++) spawnEnemyBullet(centerX(b), centerY(b), (swi - 3.5) * 50, -160, 10, '#ff6a2a'); Audio.sfx('flame'); }
       }
     } else if (b.def.id === 'commander') {
       if (adx > 200) b.x += b.face * 80 * dt;
@@ -299,9 +341,11 @@
         var cp = phaseDef.pattern[Math.floor(Math.random() * phaseDef.pattern.length)];
         if (cp === 'pistolVolley') { for (var pvi = 0; pvi < 3; pvi++) spawnEnemyBullet(centerX(b) + b.face * 20, centerY(b) - 10, b.face * 400, -30 + pvi * 30, 15, '#ff8844'); Audio.sfx('shotgun'); }
         else if (cp === 'summon') { for (var si = 0; si < 3; si++) { var ne = spawnEnemy('grunt', centerX(b) + (Math.random() - 0.5) * 100); if (ne) world.enemies.push(ne); } Audio.sfx('enemydie'); }
-        else if (cp === 'dash') { b.vx = b.face * 400; setTimeout(function () { b.vx = 0; }, 400); world.shake = 5; }
+        else if (cp === 'dash') { b.vx = b.face * 400; setTimeout(function () { b.vx = 0; }, 400); }
         else if (cp === 'megaSlash') { if (overlap(b, player)) hurtPlayer(40); explodeAt(centerX(b) + b.face * 60, centerY(b), 60, '#ff5e5e'); Audio.sfx('heavy'); }
-        else if (cp === 'rage') { world.shake = 10; screenFlash('#ff0000', 0.2); for (var ri = 0; ri < 12; ri++) spawnEnemyBullet(centerX(b), centerY(b), Math.cos(ri / 12 * Math.PI * 2) * 200, Math.sin(ri / 12 * Math.PI * 2) * 200, 12, '#ff5e5e'); Audio.sfx('enrage'); }
+        else if (cp === 'rage') { screenFlash('#ff0000', 0.2); for (var ri = 0; ri < 12; ri++) spawnEnemyBullet(centerX(b), centerY(b), Math.cos(ri / 12 * Math.PI * 2) * 200, Math.sin(ri / 12 * Math.PI * 2) * 200, 12, '#ff5e5e'); Audio.sfx('enrage'); }
+        else if (cp === 'teleport') { b.x = centerX(player) + (Math.random() > 0.5 ? 1 : -1) * (100 + Math.random() * 80); b.y = GROUND_Y - b.h; addSpark(centerX(b), centerY(b), '#8a2a6a'); Audio.sfx('bolt'); }
+        else if (cp === 'bladeStorm') { for (var bsi = 0; bsi < 16; bsi++) { var bsa = bsi / 16 * Math.PI * 2; spawnEnemyBullet(centerX(b), centerY(b), Math.cos(bsa) * 260, Math.sin(bsa) * 260, 14, '#ff79d1'); } Audio.sfx('slash3'); }
       }
       b.x += b.vx * dt; b.vx *= 0.9;
     }
@@ -315,6 +359,39 @@
     Audio.sfx('menu');
   }
 
+  var bossRushIdx = 0;
+  var bossRushScore = 0;
+
+  function startBossRush() {
+    bossRushIdx = 0;
+    bossRushScore = 0;
+    selectedStage = 0;
+    beginBossRushRound();
+  }
+
+  function beginBossRushRound() {
+    var stage = MS.STAGES[bossRushIdx];
+    world = {
+      stage: stage, stageId: bossRushIdx,
+      width: 1200, rng: MS.makeRng('bossrush:' + bossRushIdx + ':' + Date.now()),
+      cameraX: 0, shake: 0, elapsed: 0,
+      enemies: [], bullets: [], rockets: [], flames: [], grenades: [],
+      particles: [], effects: [], floats: [], pickups: [], barrels: [],
+      kills: 0, prisoners: 0, prisonerTotal: 0,
+      score: bossRushScore, spawnIdx: 0, eventIdx: 0,
+      bossSpawned: true, bossKilled: false,
+      boss: null, bossWarn: 2.0, hitFlag: false, finished: false,
+      bossRush: true,
+    };
+    player = createPlayer();
+    player.hp = player.maxHp * (bossRushIdx === 0 ? 1 : 0.7);
+    state = STATE.PLAY;
+    stateT = 0;
+    spawnBoss(bossRushIdx);
+    Audio.musicStart(2);
+    toast('BOSS RUSH ' + (bossRushIdx + 1) + '/5 · ' + MS.BOSSES[bossRushIdx].name, '#ff5e5e');
+  }
+
   function beginPlay() {
     var stage = MS.STAGES[selectedStage];
     world = {
@@ -322,9 +399,9 @@
       width: stage.width, rng: MS.makeRng('stage:' + selectedStage + ':' + Date.now()),
       cameraX: 0, shake: 0, elapsed: 0,
       enemies: [], bullets: [], rockets: [], flames: [], grenades: [],
-      particles: [], effects: [], floats: [], pickups: [],
+      particles: [], effects: [], floats: [], pickups: [], barrels: [],
       kills: 0, prisoners: 0, prisonerTotal: stage.prisoners,
-      score: 0, spawnIdx: 0, bossSpawned: false, bossKilled: false,
+      score: 0, spawnIdx: 0, eventIdx: 0, bossSpawned: false, bossKilled: false,
       boss: null, bossWarn: 0, hitFlag: false, finished: false,
     };
     player = createPlayer();
@@ -343,6 +420,11 @@
       var px = 300 + pr * (stage.width - 500) / stage.prisoners + Math.random() * 100;
       world.pickups.push({ x: px, y: GROUND_Y - 28, w: 16, h: 28, type: 'pow', vy: 0, life: -1, bob: 0, rescued: false });
     }
+    if (stage.barrels) {
+      for (var bi = 0; bi < stage.barrels.length; bi++) {
+        world.barrels.push({ x: stage.barrels[bi], y: GROUND_Y - 28, w: 18, h: 28, hp: 10, dead: false });
+      }
+    }
 
     Audio.musicStart(selectedStage < 4 ? (selectedStage < 2 ? 0 : 1) : 2);
     toast(stage.subtitle, stage.theme.accent);
@@ -359,7 +441,6 @@
         var sx = sp.x + c * 35 + Math.random() * 20;
         var e = spawnEnemy(sp.type, sx);
         if (e) {
-          if (e.def.miniboss) world.shake = Math.max(world.shake, 4);
           world.enemies.push(e);
         }
       }
@@ -369,6 +450,41 @@
     if (!world.bossSpawned && world.spawnIdx >= stage.spawns.length && world.kills >= stage.spawns.reduce(function (s, sp) { return s + sp.count; }, 0) * 0.6) {
       world.bossSpawned = true;
       spawnBoss(world.stageId);
+    }
+  }
+
+  function updateEvents(dt) {
+    if (!world || world.finished) return;
+    var stage = world.stage;
+    if (!stage.events) return;
+    var camRight = world.cameraX + VIEW_W;
+    while (world.eventIdx < stage.events.length && stage.events[world.eventIdx].x < camRight - 100) {
+      var ev = stage.events[world.eventIdx];
+      world.eventIdx++;
+      if (ev.type === 'ambush') {
+        toast('⚠ AMBUSH!', '#ff5e5e');
+        Audio.sfx('bosswarn');
+        for (var ai = 0; ai < ev.enemies.length; ai++) {
+          var side = ai % 2 === 0 ? world.cameraX + 30 : world.cameraX + VIEW_W - 60;
+          var ae = spawnEnemy(ev.enemies[ai], side);
+          if (ae) { ae.aggro = true; world.enemies.push(ae); }
+        }
+      } else if (ev.type === 'drop') {
+        toast('⚠ 공중 강습!', '#ff8c42');
+        Audio.sfx('bosswarn');
+        for (var di = 0; di < ev.enemies.length; di++) {
+          var de = spawnEnemy(ev.enemies[di], world.cameraX + 100 + di * 120 + Math.random() * 60);
+          if (de) { de.y = -40 - di * 30; de.vy = 0; de.aggro = true; world.enemies.push(de); }
+        }
+      } else if (ev.type === 'supply') {
+        toast('보급품 투하!', '#74e79a');
+        Audio.sfx('itemdrop');
+        world.pickups.push({ x: world.cameraX + VIEW_W * 0.3, y: -20, w: 16, h: 16, type: 'health', amount: 40, vy: 0, life: 15, bob: 0 });
+        world.pickups.push({ x: world.cameraX + VIEW_W * 0.5, y: -40, w: 16, h: 16, type: 'grenade', count: 5, vy: 0, life: 15, bob: 0 });
+        var rw = MS.randomWeaponDrop(world.rng);
+        var rwpn = MS.WEAPONS[rw];
+        world.pickups.push({ x: world.cameraX + VIEW_W * 0.7, y: -60, w: 24, h: 20, weapon: rw, vy: 0, life: 15, bob: 0 });
+      }
     }
   }
 
@@ -393,6 +509,13 @@
           player.grenades += p.count || 3;
           toast('수류탄 +' + (p.count || 3), '#ffe066');
           Audio.sfx('itempick');
+          world.pickups.splice(i, 1);
+        } else if (p.type === 'health') {
+          var heal = p.amount || 40;
+          player.hp = Math.min(player.maxHp, player.hp + heal);
+          addFloat(centerX(player), player.y - 16, '+' + heal + ' HP', '#74e79a', 14);
+          toast('체력 +' + heal, '#74e79a');
+          Audio.sfx('potion');
           world.pickups.splice(i, 1);
         } else if (p.type === 'pow' && !p.rescued) {
           p.rescued = true;
@@ -422,6 +545,7 @@
     if (state !== STATE.PLAY) return;
     updateCamera(dt);
     updateSpawns(dt);
+    updateEvents(dt);
     for (var i = 0; i < world.enemies.length; i++) updateEnemy(world.enemies[i], dt);
     if (world.boss) updateBoss(world.boss, dt);
     updateProjectiles(dt);

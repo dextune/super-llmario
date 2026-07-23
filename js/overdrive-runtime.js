@@ -12,7 +12,7 @@
   }
 
   function loadOverdriveProfile() {
-    var fallback = { level: 1, xp: 0, nextXp: 140, damage: 1, fireRate: 1, crit: 0.06, maxHpBonus: 0, melee: 1 };
+    var fallback = { level: 1, xp: 0, nextXp: 140, damage: 1, fireRate: 1, crit: 0.06, maxHpBonus: 0, melee: 1, gunPower: 0, doubleJump: false, weaponLevels: {}, achievements: {}, stats: { totalKills: 0, maxCombo: 0, totalPlayTime: 0, bossKills: 0, barrelChains: 0, arcChains: 0 } };
     try {
       if (typeof localStorage === 'undefined') return fallback;
       var raw = localStorage.getItem(OVERDRIVE_SAVE_KEY);
@@ -22,10 +22,15 @@
       fallback.xp = Math.max(0, Number(data.xp) || 0);
       fallback.nextXp = Math.max(140, Number(data.nextXp) || 140);
       fallback.damage = Math.max(1, Number(data.damage) || 1);
-      fallback.fireRate = Math.max(0.7, Math.min(1, Number(data.fireRate) || 1));
+      fallback.fireRate = Math.max(0.5, Math.min(1, Number(data.fireRate) || 1));
       fallback.crit = Math.max(0.06, Math.min(0.35, Number(data.crit) || 0.06));
       fallback.maxHpBonus = Math.max(0, Math.min(200, Number(data.maxHpBonus) || 0));
       fallback.melee = Math.max(1, Number(data.melee) || 1);
+      fallback.gunPower = Math.max(0, Number(data.gunPower) || 0);
+      fallback.doubleJump = !!data.doubleJump;
+      fallback.weaponLevels = (data.weaponLevels && typeof data.weaponLevels === 'object') ? data.weaponLevels : {};
+      fallback.achievements = (data.achievements && typeof data.achievements === 'object') ? data.achievements : {};
+      fallback.stats = Object.assign({ totalKills: 0, maxCombo: 0, totalPlayTime: 0, bossKills: 0, barrelChains: 0, arcChains: 0 }, data.stats || {});
     } catch (error) {}
     return fallback;
   }
@@ -36,11 +41,54 @@
     } catch (error) {}
   }
 
+  var ACHIEVEMENTS = {
+    first_blood: { name: '첫 피', desc: '첫 적 처치', icon: '🎯' },
+    combo_10: { name: '콤보 x10', desc: '10콤보 달성', icon: '🔥' },
+    combo_30: { name: '콤보 마스터', desc: '30콤보 달성', icon: '💥' },
+    level_10: { name: '베테랑', desc: '레벨 10 달성', icon: '⭐' },
+    level_25: { name: '엘리트', desc: '레벨 25 달성', icon: '🌟' },
+    level_50: { name: '전설', desc: '레벨 50 달성', icon: '👑' },
+    boss_kill: { name: '보스 헌터', desc: '첫 보스 처치', icon: '🏆' },
+    boss_rush_clear: { name: '보스 러시 클리어', desc: '보스 러시 완주', icon: '💀' },
+    arc_chain_5: { name: '체인 번개', desc: 'Arc Rifle 5체인', icon: '⚡' },
+    barrel_chain_3: { name: '연쇄 폭발', desc: '드럼통 3개 연쇄', icon: '🛢' },
+    weapon_max: { name: '마스터 건스미스', desc: '무기 Lv.3 달성', icon: '🔧' },
+    no_hit_stage: { name: '무결점', desc: '스테이지 무피격 클리어', icon: '🛡' },
+  };
+
+  function unlockAchievement(id) {
+    if (!profile.achievements) profile.achievements = {};
+    if (profile.achievements[id]) return;
+    var ach = ACHIEVEMENTS[id];
+    if (!ach) return;
+    profile.achievements[id] = true;
+    toast(ach.icon + ' 업적: ' + ach.name + ' — ' + ach.desc, '#ffd76a');
+    if (typeof Audio !== 'undefined' && Audio.sfx) Audio.sfx('levelup');
+    saveOverdriveProfile();
+  }
+
+  function trackStat(key, value) {
+    if (!profile.stats) profile.stats = {};
+    if (typeof value === 'number') profile.stats[key] = (profile.stats[key] || 0) + value;
+  }
+
+  function checkCombatAchievements() {
+    if (combat.peakCombo >= 10) unlockAchievement('combo_10');
+    if (combat.peakCombo >= 30) unlockAchievement('combo_30');
+    if (profile.level >= 10) unlockAchievement('level_10');
+    if (profile.level >= 25) unlockAchievement('level_25');
+    if (profile.level >= 50) unlockAchievement('level_50');
+    if (profile.weaponLevels) {
+      for (var wk in profile.weaponLevels) {
+        if (profile.weaponLevels[wk] >= 3) { unlockAchievement('weapon_max'); break; }
+      }
+    }
+    if (world && !world.hitFlag && world.bossKilled) unlockAchievement('no_hit_stage');
+    saveOverdriveProfile();
+  }
+
   function resetCombatState() {
     combat = createCombatState();
-    if (world) {
-      world.hitStop = 0; world.slowMo = 0; world.kickX = 0; world.kickY = 0;
-    }
   }
 
   function styleFromCombo(combo) {
@@ -66,6 +114,8 @@
     }
     combat.style = styleFromCombo(combat.combo);
     combat.multiplier = 1 + Math.min(3, Math.floor(combat.combo / 8) * 0.25);
+    if (combat.combo > combat.peakCombo) combat.peakCombo = combat.combo;
+    if (combat.combo > (profile.stats.maxCombo || 0)) { profile.stats.maxCombo = combat.combo; }
     if (combat.style !== combat.lastStyle) {
       combat.lastStyle = combat.style;
       if (combat.style !== 'D') {
@@ -82,7 +132,7 @@
     var critChance = profile.crit + Math.min(0.12, combat.combo * 0.0025) + (combat.overdriveT > 0 ? 0.12 : 0);
     var critical = weakpoint || Math.random() < critChance;
     var eliteGuard = target.elite ? 0.92 : 1;
-    var damage = baseDamage * profile.damage * eliteGuard * (combat.overdriveT > 0 ? 1.38 : 1) * (critical ? (weakpoint ? 1.85 : 1.55) : 1);
+    var damage = (baseDamage + profile.gunPower) * profile.damage * (typeof getWeaponDmgMult === 'function' ? getWeaponDmgMult(player ? player.weapon : '') : 1) * eliteGuard * (combat.overdriveT > 0 ? 1.38 : 1) * (critical ? (weakpoint ? 1.85 : 1.55) : 1);
     return { damage: damage, critical: critical, weakpoint: weakpoint, boss: boss };
   }
 
@@ -99,11 +149,6 @@
     addFloat(ix, target.y - 10, (result.critical ? 'CRIT ' : '') + Math.ceil(result.damage), impactColor, result.critical ? 16 : 11);
     world.effects.push({ type: 'impact', x: ix, y: iy, r: result.critical ? 34 : 20, life: result.critical ? 0.18 : 0.11, maxLife: result.critical ? 0.18 : 0.11, color: impactColor, spin: Math.random() * Math.PI });
     addSpark(ix, iy, impactColor);
-    world.hitStop = Math.max(world.hitStop || 0, killed ? (boss ? 0.095 : 0.07) : result.critical ? 0.055 : 0.022);
-    world.slowMo = Math.max(world.slowMo || 0, killed && (target.elite || boss) ? 0.12 : 0);
-    world.kickX = (Math.random() - 0.5) * (result.critical ? 10 : 4);
-    world.kickY = (Math.random() - 0.5) * (result.critical ? 7 : 3);
-    world.shake = Math.max(world.shake, killed ? 7 : result.critical ? 4.5 : 2);
     ImpactAudio.play(killed ? (target.elite || boss ? 'eliteKill' : 'kill') : result.critical ? 'crit' : 'impact');
 
     if (killed) {
@@ -123,18 +168,23 @@
       profile.xp -= profile.nextXp;
       profile.level++;
       profile.nextXp = Math.floor(profile.nextXp * 1.22 + 35);
-      profile.damage = Math.min(2.15, profile.damage + 0.045);
+      profile.damage = Math.min(3.5, profile.damage + 0.10);
+      profile.gunPower = Math.min(60, profile.gunPower + 2.5);
       profile.crit = Math.min(0.35, profile.crit + (profile.level % 2 === 0 ? 0.008 : 0.004));
       profile.maxHpBonus = Math.min(200, profile.maxHpBonus + 5);
-      if (profile.level % 3 === 0) profile.fireRate = Math.max(0.7, profile.fireRate - 0.015);
+      if (profile.level % 2 === 0) profile.fireRate = Math.max(0.5, profile.fireRate - 0.025);
       profile.melee += 0.06;
+      if (profile.level >= 5 && !profile.doubleJump) {
+        profile.doubleJump = true;
+        toast('2단 점프 해금! (공중에서 점프)', '#5cdbff');
+      }
       if (player) {
         player.maxHp = MS.MAX_HP + profile.maxHpBonus;
         player.hp = Math.min(player.maxHp, player.hp + 30);
       }
       screenFlash('#74e79a', 0.35);
       world.effects.push({ type: 'shockwave', x: centerX(player), y: centerY(player), r: 120, life: 0.7, maxLife: 0.7, color: '#74e79a' });
-      toast('LEVEL UP ' + profile.level + ' · 화력/체력/치명타 상승', '#74e79a');
+      toast('LEVEL UP ' + profile.level + ' · 화력+' + Math.round(profile.gunPower) + ' · 연사/치명타 상승', '#74e79a');
       ImpactAudio.play('level');
     }
     saveOverdriveProfile();
@@ -151,7 +201,6 @@
     combat.overdriveT = 7;
     combat.comboT = Math.max(combat.comboT, 3);
     screenFlash('#5cdbff', 0.3);
-    world.shake = Math.max(world.shake, 8);
     world.effects.push({ type: 'shockwave', x: centerX(player), y: centerY(player), r: 160, life: 0.8, maxLife: 0.8, color: '#5cdbff' });
     toast('OVERDRIVE · 화력 138% · 연사 162% · 치명타 상승', '#5cdbff');
     ImpactAudio.play('overdrive');
@@ -183,7 +232,6 @@
     var slashY = player.y + player.h * 0.45;
     world.effects.push({ type: 'slash', x: slashX, y: slashY, r: 45, life: 0.16, maxLife: 0.16, color: hitCount ? '#fff08a' : '#c9d5ec', width: hitCount ? 9 : 5, a0: player.face > 0 ? -0.9 : Math.PI - 0.9, a1: player.face > 0 ? 0.9 : Math.PI + 0.9 });
     player.vx += player.face * (hitCount ? 85 : 35);
-    world.kickX = -player.face * (hitCount ? 7 : 2);
     ImpactAudio.play(hitCount ? 'bladeHit' : 'blade');
   }
 

@@ -65,36 +65,36 @@
     hmg: {
       id: 'hmg', name: '중기관총', letter: 'H', color: '#ff8c42',
       kind: 'bullet', fireRate: 0.055, damage: 9, speed: 900, spread: 0.06,
-      ammo: 200, pellets: 1, life: 0.6, shake: 1.5, casing: true,
+      ammo: 200, pellets: 1, life: 0.6, shake: 0.7, casing: true,
       sfx: 'mg', desc: '연사 화망 · 200발',
-    },
-    shotgun: {
-      id: 'shotgun', name: '산탄총', letter: 'S', color: '#ff5e5e',
-      kind: 'spread', fireRate: 0.6, damage: 11, speed: 700, spread: 0.28,
-      ammo: 30, pellets: 6, life: 0.32, shake: 4, casing: true,
-      sfx: 'shotgun', desc: '근접 폭풍 · 30발',
     },
     rocket: {
       id: 'rocket', name: '로켓런처', letter: 'R', color: '#ff3a3a',
       kind: 'explosive', fireRate: 0.75, damage: 70, speed: 420, spread: 0,
-      ammo: 20, pellets: 1, life: 2.0, shake: 8, casing: false,
+      ammo: 20, pellets: 1, life: 2.0, shake: 5, casing: false,
       radius: 70, sfx: 'rocket', desc: '광역 폭발 · 20발',
     },
-    flame: {
-      id: 'flame', name: '화염방사기', letter: 'F', color: '#ff6a1a',
-      kind: 'flame', fireRate: 0.035, damage: 4.5, speed: 340, spread: 0.12,
-      ammo: 80, pellets: 1, life: 0.35, shake: 0.5, casing: false,
-      radius: 0, sfx: 'flame', desc: '지속 화염 · 80연료',
+    arc: {
+      id: 'arc', name: '아크 라이플', letter: 'A', color: '#7af5ff',
+      kind: 'arc', fireRate: 0.28, damage: 18, speed: 1100, spread: 0,
+      ammo: 60, pellets: 1, life: 0.5, shake: 0.5, casing: false,
+      chainRange: 160, maxChain: 4, sfx: 'arc', desc: '연쇄 번개 · 60발',
     },
     laser: {
       id: 'laser', name: '레이저건', letter: 'L', color: '#5cdbff',
       kind: 'beam', fireRate: 0.1, damage: 22, speed: 1400, spread: 0,
-      ammo: 150, pellets: 1, life: 0.5, shake: 2, casing: false,
+      ammo: 150, pellets: 1, life: 0.5, shake: 1, casing: false,
       piercing: true, sfx: 'laser', desc: '관통 광선 · 150발',
     },
+    railgun: {
+      id: 'railgun', name: '레일건', letter: 'G', color: '#c8a0ff',
+      kind: 'beam', fireRate: 0.9, damage: 85, speed: 2200, spread: 0,
+      ammo: 12, pellets: 1, life: 0.6, shake: 3, casing: false,
+      piercing: true, sfx: 'laser', desc: '초고속 관통 · 12발',
+    },
   };
-  var WEAPON_KEYS = ['pistol', 'hmg', 'shotgun', 'rocket', 'flame', 'laser'];
-  var WEAPON_DROP_RATES = { hmg: 0.30, shotgun: 0.22, rocket: 0.15, flame: 0.16, laser: 0.17 };
+  var WEAPON_KEYS = ['pistol', 'hmg', 'rocket', 'arc', 'laser', 'railgun'];
+  var WEAPON_DROP_RATES = { hmg: 0.28, rocket: 0.18, arc: 0.20, laser: 0.20, railgun: 0.14 };
 
   function randomWeaponDrop(rng) {
     var r = rng.random();

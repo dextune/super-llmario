@@ -82,6 +82,12 @@
       g.fillText('[ENTER] 작전 개시', VIEW_W / 2, 380);
     }
 
+    if (save.unlockedStages >= 5) {
+      g.font = '11px "Press Start 2P", monospace';
+      g.fillStyle = '#ff5e5e';
+      g.fillText('[B] BOSS RUSH — 5보스 연속전', VIEW_W / 2, 420);
+    }
+
     g.font = '9px "Press Start 2P", monospace';
     g.fillStyle = '#555';
     g.fillText('A/D 이동 · SPACE 점프 · J 사격 · K 수류탄 · S 앉기', VIEW_W / 2, 480);
@@ -308,9 +314,6 @@
     else if (state === STATE.PAUSED || state === STATE.CLEAR || state === STATE.OVER || state === STATE.WIN || state === STATE.BRIEF) stateT += dt;
 
     g.save();
-    if (world && world.shake > 0 && state === STATE.PLAY) {
-      g.translate((Math.random() - 0.5) * world.shake, (Math.random() - 0.5) * world.shake);
-    }
 
     if (state === STATE.TITLE) drawTitle();
     else if (state === STATE.SELECT) drawSelect();

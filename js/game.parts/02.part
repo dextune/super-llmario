@@ -11,6 +11,7 @@
       weapon: 'pistol', weaponAmmo: Infinity, grenades: MS.START_GRENADES,
       lives: MS.MAX_LIVES, animT: 0, animFrame: 0, dead: false,
       respawnT: 0, hurtT: 0, aimUp: false,
+      dashT: 0, dashCd: 0, dashDir: 0,
     };
   }
 
@@ -39,6 +40,31 @@
     if (player.invuln > 0) player.invuln -= dt;
     if (player.hurtT > 0) player.hurtT -= dt;
     if (player.fireCd > 0) player.fireCd -= dt;
+    if (player.dashT > 0) player.dashT -= dt;
+    if (player.dashCd > 0) player.dashCd -= dt;
+
+    // 대시 트리거 (더블탭)
+    if (dashPressed !== 0 && player.dashCd <= 0 && player.dashT <= 0 && !player.dead) {
+      player.dashT = 0.15;
+      player.dashCd = 0.8;
+      player.dashDir = dashPressed;
+      player.invuln = Math.max(player.invuln, 0.18);
+      Audio.sfx('dash');
+      for (var di = 0; di < 4; di++) {
+        world.particles.push({ x: player.x + player.w / 2, y: player.y + player.h / 2, vx: -player.dashDir * (60 + di * 30), vy: (Math.random() - 0.5) * 40, life: 0.2, maxLife: 0.2, color: '#7af5ff', size: 6 - di, type: 'flash' });
+      }
+    }
+    dashPressed = 0;
+
+    // 대시 중 이동
+    if (player.dashT > 0) {
+      player.vx = player.dashDir * 600;
+      player.face = player.dashDir;
+      // 잔상
+      if (Math.random() < 0.6) {
+        world.particles.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: 0.15, maxLife: 0.15, color: '#7af5ff', size: player.w, type: 'afterimage', pw: player.w, ph: player.h, pface: player.face });
+      }
+    }
 
     player.aimUp = input.up && !input.down;
     player.crouch = input.down && player.onGround;
@@ -102,19 +128,12 @@
     var dirX = player.aimUp ? 0 : player.face;
     var dirY = player.aimUp ? -1 : 0;
 
-    if (wpn.kind === 'spread') {
-      for (var i = 0; i < wpn.pellets; i++) {
-        var sp = wpn.spread;
-        var ang = Math.atan2(dirY || 0.01, dirX) + (Math.random() - 0.5) * sp * 2;
-        spawnBullet(mx, my, Math.cos(ang) * wpn.speed, Math.sin(ang) * wpn.speed, wpn.damage, true, '#ffdd44');
-      }
-    } else if (wpn.kind === 'explosive') {
+    if (wpn.kind === 'explosive') {
       spawnRocket(mx, my, dirX * wpn.speed, dirY * wpn.speed - (dirY === 0 ? 0 : 0), wpn);
-    } else if (wpn.kind === 'flame') {
-      for (var f = 0; f < 3; f++) {
-        var fa = Math.atan2(dirY || 0.01, dirX) + (Math.random() - 0.5) * wpn.spread * 2;
-        spawnFlame(mx, my, Math.cos(fa) * wpn.speed, Math.sin(fa) * wpn.speed, wpn.damage);
-      }
+    } else if (wpn.kind === 'arc') {
+      spawnBullet(mx, my, dirX * wpn.speed, dirY * wpn.speed, wpn.damage, true, wpn.color, false);
+      var ab = world.bullets[world.bullets.length - 1];
+      ab.arc = true; ab.chainRange = wpn.chainRange; ab.maxChain = wpn.maxChain; ab.chainHit = {};
     } else if (wpn.kind === 'beam') {
       spawnBullet(mx, my, dirX * wpn.speed, dirY * wpn.speed, wpn.damage, true, wpn.color, true);
     } else {
@@ -124,7 +143,6 @@
 
     addMuzzleFlash(mx, my, player.face, player.aimUp);
     if (wpn.casing) addCasing(muzzleX() - player.face * 8, player.y + 12, player.face);
-    if (wpn.shake > 0) world.shake = Math.max(world.shake, wpn.shake);
     Audio.sfx(wpn.sfx);
 
     if (player.weaponAmmo !== Infinity) player.weaponAmmo--;
@@ -147,7 +165,6 @@
     player.hp -= amount;
     player.invuln = 1.2;
     player.hurtT = 0.3;
-    world.shake = Math.max(world.shake, 5);
     world.hitFlag = true;
     screenFlash('#ff0000', 0.12);
     Audio.sfx('hurt');
@@ -159,7 +176,6 @@
     player.dead = true;
     player.lives--;
     player.respawnT = 2.0;
-    world.shake = 10;
     screenFlash('#ff0000', 0.3);
     explodeAt(centerX(player), centerY(player), 50, '#ff5e3a');
     Audio.sfx('die');
@@ -191,6 +207,39 @@
     world.flames.push({ x: x - 3, y: y - 3, w: 6, h: 6, vx: vx, vy: vy, dmg: dmg, life: 0.35, maxLife: 0.35 });
   }
 
+  function triggerArcChain(source, bullet) {
+    var chainDmg = bullet.dmg * 0.7;
+    var chainsLeft = bullet.maxChain - 1;
+    var hitIds = {};
+    hitIds[source.id] = true;
+    var cx = centerX(source), cy = centerY(source);
+
+    for (var c = 0; c < chainsLeft; c++) {
+      var best = null, bestDist = bullet.chainRange;
+      for (var j = 0; j < world.enemies.length; j++) {
+        var ne = world.enemies[j];
+        if (ne.dead || hitIds[ne.id]) continue;
+        var d = Math.hypot(centerX(ne) - cx, centerY(ne) - cy);
+        if (d < bestDist) { bestDist = d; best = ne; }
+      }
+      if (world.boss && !world.boss.dead && !hitIds['boss']) {
+        var bd = Math.hypot(centerX(world.boss) - cx, centerY(world.boss) - cy);
+        if (bd < bestDist) { bestDist = bd; best = world.boss; hitIds['boss'] = true; }
+      }
+      if (!best) break;
+
+      var nx = centerX(best), ny = centerY(best);
+      world.effects.push({ type: 'arc', x1: cx, y1: cy, x2: nx, y2: ny, life: 0.15, maxLife: 0.15, color: bullet.color || '#7af5ff' });
+      if (best === world.boss) { damageBoss(best, chainDmg); }
+      else { damageEnemy(best, chainDmg, nx > cx ? 1 : -1); }
+      addSpark(nx, ny, '#7af5ff');
+      hitIds[best.id] = true;
+      cx = nx; cy = ny;
+      chainDmg *= 0.7;
+    }
+    Audio.sfx('arc');
+  }
+
   function updateProjectiles(dt) {
     for (var i = world.bullets.length - 1; i >= 0; i--) {
       var b = world.bullets[i];
@@ -204,6 +253,7 @@
             if (b.piercing) { b.hitSet[e.id] = true; } else { world.bullets.splice(i, 1); }
             damageEnemy(e, b.dmg, b.vx > 0 ? 1 : -1);
             addSpark(centerX(b) - b.vx * 0.01, centerY(b), b.color);
+            if (b.arc) triggerArcChain(e, b);
             break;
           }
         }
@@ -211,6 +261,17 @@
           damageBoss(world.boss, b.dmg);
           addSpark(centerX(b), centerY(b), '#ffe066');
           if (!b.piercing) world.bullets.splice(i, 1);
+        }
+        // 드럼통 충돌
+        if (world.bullets[i] && b.fromPlayer) {
+          for (var bki = 0; bki < world.barrels.length; bki++) {
+            var bk = world.barrels[bki];
+            if (!bk.dead && overlap(world.bullets[i], bk)) {
+              explodeBarrel(bk);
+              if (!b.piercing) world.bullets.splice(i, 1);
+              break;
+            }
+          }
         }
       } else {
         if (player && !player.dead && overlap(b, player)) {
@@ -241,9 +302,16 @@
       if (fl.life <= 0) { world.flames.splice(fi, 1); continue; }
       for (var fe = 0; fe < world.enemies.length; fe++) {
         var fen = world.enemies[fe];
-        if (!fen.dead && overlap(fl, fen)) { damageEnemy(fen, fl.dmg * dt * 10, fl.vx > 0 ? 1 : -1); fen.burn = 0.5; }
+        if (!fen.dead && overlap(fl, fen)) {
+          fen.burn = 0.5;
+          fen._flameCd = (fen._flameCd || 0) - dt;
+          if (fen._flameCd <= 0) { fen._flameCd = 0.08; damageEnemy(fen, fl.dmg * 6, fl.vx > 0 ? 1 : -1); }
+        }
       }
-      if (world.boss && !world.boss.dead && overlap(fl, world.boss)) damageBoss(world.boss, fl.dmg * dt * 10);
+      if (world.boss && !world.boss.dead && overlap(fl, world.boss)) {
+        world.boss._flameCd = (world.boss._flameCd || 0) - dt;
+        if (world.boss._flameCd <= 0) { world.boss._flameCd = 0.08; damageBoss(world.boss, fl.dmg * 6); }
+      }
     }
 
     for (var gi = world.grenades.length - 1; gi >= 0; gi--) {
@@ -266,7 +334,6 @@
   }
 
   function explodeAt(x, y, radius, color) {
-    world.shake = Math.max(world.shake, 8);
     screenFlash(color, 0.08);
     Audio.sfx('explode');
     for (var i = 0; i < 16; i++) {
@@ -281,6 +348,24 @@
     }
     world.effects.push({ type: 'shockwave', x: x, y: y, r: radius, life: 0.4, maxLife: 0.4, color: '#ffe066' });
     world.effects.push({ type: 'flash', x: x, y: y, r: radius * 0.6, life: 0.2, maxLife: 0.2, color: '#ffffff' });
+  }
+
+  function explodeBarrel(barrel) {
+    if (barrel.dead) return;
+    barrel.dead = true;
+    var bx = centerX(barrel), by = centerY(barrel);
+    explodeAt(bx, by, 80, '#ff6a2a');
+    damageEnemyArea(bx, by, 80, 60);
+    if (player && !player.dead && Math.hypot(centerX(player) - bx, centerY(player) - by) < 80) hurtPlayer(25);
+    // 연쇄 폭발
+    for (var i = 0; i < world.barrels.length; i++) {
+      var ob = world.barrels[i];
+      if (!ob.dead && ob !== barrel && Math.hypot(centerX(ob) - bx, centerY(ob) - by) < 120) {
+        setTimeout(function (o) { explodeBarrel(o); }, 120, ob);
+      }
+    }
+    world.score += 50;
+    addFloat(bx, by - 20, '+50', '#ff8c42', 10);
   }
 
   function damageEnemyArea(x, y, radius, dmg) {
@@ -334,7 +419,6 @@
       world.floats[f].y -= 40 * dt; world.floats[f].life -= dt;
       if (world.floats[f].life <= 0) world.floats.splice(f, 1);
     }
-    if (world.shake > 0) world.shake -= dt * 20;
     if (flashT > 0) flashT -= dt;
     if (toastT > 0) toastT -= dt;
   }

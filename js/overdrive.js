@@ -23,6 +23,7 @@
   function patch(source) {
     if (typeof source !== 'string' || source.length < 1000) throw new Error('[OVERDRIVE] invalid game source');
     if (source.indexOf(PATCH_MARKER) >= 0) return source;
+    source = source.replace(/\r\n/g, '\n');
 
     source = replaceOnce(source,
       "  var toastColor = '#ffffff';\n",
@@ -51,8 +52,13 @@
 
     source = replaceOnce(source,
       "respawnT: 0, hurtT: 0, aimUp: false,",
-      "respawnT: 0, hurtT: 0, aimUp: false, meleeCd: 0, recoilT: 0,",
+      "respawnT: 0, hurtT: 0, aimUp: false, meleeCd: 0, recoilT: 0, jumpsLeft: 0,",
       'player combat timers');
+
+    source = replaceOnce(source,
+      "    if (input.jump && player.onGround) {\n      player.vy = -540;\n      player.onGround = false;\n      Audio.sfx('jump');\n      addDust(player.x + player.w / 2, player.y + player.h, 4);\n    }\n",
+      "    if (input.jump && player.onGround) {\n      player.vy = -540;\n      player.onGround = false;\n      player.jumpsLeft = profile.doubleJump ? 1 : 0;\n      Audio.sfx('jump');\n      addDust(player.x + player.w / 2, player.y + player.h, 4);\n    } else if (input.jump && !player.onGround && player.jumpsLeft > 0) {\n      player.vy = -440;\n      player.jumpsLeft--;\n      Audio.sfx('jump');\n      addDust(player.x + player.w / 2, player.y + player.h, 3);\n      world.particles.push({ x: player.x + player.w / 2, y: player.y + player.h, vx: 0, vy: 30, life: 0.2, maxLife: 0.2, color: '#5cdbff', size: 8, type: 'flash' });\n    }\n",
+      'double jump');
 
     source = replaceOnce(source,
       "    if (player.fireCd > 0) player.fireCd -= dt;\n",
@@ -73,6 +79,11 @@
       "    player.fireCd = wpn.fireRate;\n",
       "    player.fireCd = wpn.fireRate * profile.fireRate * (combat.overdriveT > 0 ? 0.62 : 1);\n    player.recoilT = Math.max(player.recoilT, 0.05 + (wpn.shake || 0) * 0.012);\n",
       'weapon cadence');
+
+    source = replaceOnce(source,
+      "        if (p.weapon) {\n          var wpn = MS.WEAPONS[p.weapon];\n          player.weapon = p.weapon;\n          player.weaponAmmo = wpn.ammo;\n          toast(wpn.name + ' 획득!', wpn.color);\n",
+      "        if (p.weapon) {\n          var wpn = MS.WEAPONS[p.weapon];\n          if (player.weapon === p.weapon && getWeaponLevel(p.weapon) < 3) {\n            profile.weaponLevels[p.weapon] = getWeaponLevel(p.weapon) + 1;\n            var _nlv = getWeaponLevel(p.weapon);\n            player.weaponAmmo = Math.floor(wpn.ammo * getWeaponAmmoMult(p.weapon));\n            toast(wpn.name + ' 강화! Lv.' + _nlv + ' (데미지 +' + (_nlv * 15) + '%)', '#ffd76a');\n            addFloat(centerX(player), player.y - 16, 'Lv.' + _nlv, '#ffd76a', 16);\n            Audio.sfx('levelup');\n            saveOverdriveProfile();\n          } else {\n            player.weapon = p.weapon;\n            player.weaponAmmo = Math.floor(wpn.ammo * getWeaponAmmoMult(p.weapon));\n            toast(wpn.name + ' 획득!', wpn.color);\n          }\n",
+      'weapon upgrade pickup');
 
     source = replaceOnce(source,
       "  function damageEnemy(e, dmg, dir) {\n    if (e.dead) return;\n",
@@ -106,8 +117,18 @@
 
     source = replaceOnce(source,
       "    world.score += e.def.score;\n    addFloat(centerX(e), e.y - 8, '+' + e.def.score, '#ffe066', 12);\n",
-      "    var killReward = Math.floor((e.score || e.def.score) * combat.multiplier);\n    world.score += killReward;\n    addFloat(centerX(e), e.y - 8, '+' + killReward, e.elite ? '#ff79d1' : '#ffe066', e.elite ? 15 : 12);\n",
+      "    var killReward = Math.floor((e.score || e.def.score) * combat.multiplier);\n    world.score += killReward;\n    addFloat(centerX(e), e.y - 8, '+' + killReward, e.elite ? '#ff79d1' : '#ffe066', e.elite ? 15 : 12);\n    trackStat('totalKills', 1); unlockAchievement('first_blood');\n",
       'style-scaled kill reward');
+
+    source = replaceOnce(source,
+      "    world.bossKilled = true;\n    screenFlash('#ffffff', 0.4);\n",
+      "    world.bossKilled = true;\n    trackStat('bossKills', 1); unlockAchievement('boss_kill');\n    screenFlash('#ffffff', 0.4);\n",
+      'boss kill tracking');
+
+    source = replaceOnce(source,
+      "    if (world.finished) return;\n    world.finished = true;\n",
+      "    if (world.finished) return;\n    world.finished = true;\n    checkCombatAchievements();\n",
+      'stage clear achievements');
 
     source = replaceOnce(source,
       "    player = createPlayer();\n    state = STATE.PLAY;\n",
@@ -135,19 +156,9 @@
       'elite aura render');
 
     source = replaceOnce(source,
-      "      } else if (e.type === 'flash') {\n        g.fillStyle = e.color;\n        g.beginPath(); g.arc(sx, e.y, e.r * k, 0, Math.PI * 2); g.fill();\n      }\n",
-      "      } else if (e.type === 'flash') {\n        g.fillStyle = e.color;\n        g.beginPath(); g.arc(sx, e.y, e.r * k, 0, Math.PI * 2); g.fill();\n      } else if (e.type === 'impact') {\n        g.strokeStyle = e.color; g.lineWidth = Math.max(1, 7 * k);\n        g.beginPath(); g.arc(sx, e.y, e.r * (1.25 - k * 0.55), 0, Math.PI * 2); g.stroke();\n        for (var ray = 0; ray < 8; ray++) {\n          var ra = ray / 8 * Math.PI * 2 + e.spin;\n          g.beginPath();\n          g.moveTo(sx + Math.cos(ra) * e.r * 0.25, e.y + Math.sin(ra) * e.r * 0.25);\n          g.lineTo(sx + Math.cos(ra) * e.r * (1.2 - k * 0.2), e.y + Math.sin(ra) * e.r * (1.2 - k * 0.2));\n          g.stroke();\n        }\n      } else if (e.type === 'slash') {\n        g.strokeStyle = e.color; g.lineWidth = Math.max(2, e.width * k);\n        g.beginPath(); g.arc(sx, e.y, e.r, e.a0, e.a1); g.stroke();\n      }\n",
+      "      } else if (e.type === 'flash') {\n        g.fillStyle = e.color;\n        g.beginPath(); g.arc(sx, e.y, e.r * k, 0, Math.PI * 2); g.fill();\n      } else if (e.type === 'arc') {\n        var ax1 = e.x1 - world.cameraX, ay1 = e.y1, ax2 = e.x2 - world.cameraX, ay2 = e.y2;\n        g.strokeStyle = e.color; g.lineWidth = Math.max(1, 3 * k);\n        g.shadowColor = e.color; g.shadowBlur = 8;\n        g.beginPath(); g.moveTo(ax1, ay1);\n        var segs = 5;\n        for (var s = 1; s < segs; s++) {\n          var t = s / segs;\n          var jx = (Math.random() - 0.5) * 18 * k;\n          var jy = (Math.random() - 0.5) * 18 * k;\n          g.lineTo(ax1 + (ax2 - ax1) * t + jx, ay1 + (ay2 - ay1) * t + jy);\n        }\n        g.lineTo(ax2, ay2); g.stroke();\n        g.shadowBlur = 0;\n      }\n",
+      "      } else if (e.type === 'flash') {\n        g.fillStyle = e.color;\n        g.beginPath(); g.arc(sx, e.y, e.r * k, 0, Math.PI * 2); g.fill();\n      } else if (e.type === 'arc') {\n        var ax1 = e.x1 - world.cameraX, ay1 = e.y1, ax2 = e.x2 - world.cameraX, ay2 = e.y2;\n        g.strokeStyle = e.color; g.lineWidth = Math.max(1, 3 * k);\n        g.shadowColor = e.color; g.shadowBlur = 8;\n        g.beginPath(); g.moveTo(ax1, ay1);\n        var segs = 5;\n        for (var s = 1; s < segs; s++) {\n          var t = s / segs;\n          var jx = (Math.random() - 0.5) * 18 * k;\n          var jy = (Math.random() - 0.5) * 18 * k;\n          g.lineTo(ax1 + (ax2 - ax1) * t + jx, ay1 + (ay2 - ay1) * t + jy);\n        }\n        g.lineTo(ax2, ay2); g.stroke();\n        g.shadowBlur = 0;\n      } else if (e.type === 'impact') {\n        g.strokeStyle = e.color; g.lineWidth = Math.max(1, 7 * k);\n        g.beginPath(); g.arc(sx, e.y, e.r * (1.25 - k * 0.55), 0, Math.PI * 2); g.stroke();\n        for (var ray = 0; ray < 8; ray++) {\n          var ra = ray / 8 * Math.PI * 2 + e.spin;\n          g.beginPath();\n          g.moveTo(sx + Math.cos(ra) * e.r * 0.25, e.y + Math.sin(ra) * e.r * 0.25);\n          g.lineTo(sx + Math.cos(ra) * e.r * (1.2 - k * 0.2), e.y + Math.sin(ra) * e.r * (1.2 - k * 0.2));\n          g.stroke();\n        }\n      } else if (e.type === 'slash') {\n        g.strokeStyle = e.color; g.lineWidth = Math.max(2, e.width * k);\n        g.beginPath(); g.arc(sx, e.y, e.r, e.a0, e.a1); g.stroke();\n      }\n",
       'impact effect rendering');
-
-    source = replaceOnce(source,
-      "    if (state === STATE.PLAY) updatePlay(dt);\n",
-      "    var simDt = dt;\n    if (world && state === STATE.PLAY && world.hitStop > 0) { world.hitStop -= dt; simDt = 0; }\n    if (world && state === STATE.PLAY && world.slowMo > 0) { world.slowMo -= dt; simDt *= 0.45; }\n    if (state === STATE.PLAY) updatePlay(simDt);\n",
-      'hit stop simulation');
-
-    source = replaceOnce(source,
-      "    if (world && world.shake > 0 && state === STATE.PLAY) {\n      g.translate((Math.random() - 0.5) * world.shake, (Math.random() - 0.5) * world.shake);\n    }\n",
-      "    if (world && state === STATE.PLAY && (world.shake > 0 || world.kickX || world.kickY)) {\n      g.translate((Math.random() - 0.5) * world.shake + (world.kickX || 0), (Math.random() - 0.5) * world.shake + (world.kickY || 0));\n    }\n",
-      'camera kick');
 
     source = replaceOnce(source,
       "    else if (state === STATE.PLAY) { drawField(); drawHUD(); drawFlash(); }\n",
@@ -155,9 +166,9 @@
       'combat overlay');
 
     source = replaceOnce(source,
-      "    if (world.shake > 0) world.shake -= dt * 20;\n",
-      "    if (world.shake > 0) world.shake -= dt * 20;\n    if (world.kickX) world.kickX *= Math.pow(0.0008, dt);\n    if (world.kickY) world.kickY *= Math.pow(0.0008, dt);\n",
-      'camera kick decay');
+      "      g.fillStyle = b.color || '#ffe066';\n      g.shadowColor = b.color || '#ffe066'; g.shadowBlur = 6;\n      g.fillRect(sx, b.y, b.w, b.h);\n      g.shadowBlur = 0;\n",
+      "      var bScale = 1 + Math.min(1.2, (profile.gunPower || 0) * 0.02);\n      var bw = b.w * bScale, bh = b.h * bScale;\n      g.fillStyle = b.color || '#ffe066';\n      g.shadowColor = b.color || '#ffe066'; g.shadowBlur = 6 + Math.min(10, (profile.gunPower || 0) * 0.15);\n      g.fillRect(sx - (bw - b.w) / 2, b.y - (bh - b.h) / 2, bw, bh);\n      g.shadowBlur = 0;\n",
+      'bullet power scaling');
 
     source = replaceOnce(source,
       "RUN & GUN · 5 OPERATIONS",
@@ -181,6 +192,9 @@
 
     source = replaceOnce(source,
       "  /* ===== 세이브 ===== */\n",
+      "  function getWeaponLevel(wid) { return (profile.weaponLevels && profile.weaponLevels[wid]) || 0; }\n" +
+      "  function getWeaponDmgMult(wid) { var lv = getWeaponLevel(wid); return 1 + lv * 0.15; }\n" +
+      "  function getWeaponAmmoMult(wid) { var lv = getWeaponLevel(wid); return 1 + lv * 0.25; }\n" +
       (root.MetalStrikeCombatRuntime || '') + "\n  /* ===== 세이브 ===== */\n",
       'combat runtime injection');
 

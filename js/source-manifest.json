@@ -3,11 +3,13 @@
     "parts": [
       "js/core.parts/01.part",
       "js/core.parts/02.part",
-      "js/core.parts/03.part"
+      "js/core.parts/03.part",
+      "js/core.parts/04.part",
+      "js/core.parts/05.part"
     ],
-    "bytes": 18495,
-    "sha256": "16c1111165868c47fa074af4f332a62e563d81ae92d314f08db9065c73e75f4f",
-    "part_count": 3
+    "bytes": 22729,
+    "sha256": "66c8f668a884f30fa40cf9884ccdee2929be7cc36e04dfd2e5daa6e09d6ff0e6",
+    "part_count": 5
   },
   "ms-game.js": {
     "parts": [
@@ -15,10 +17,14 @@
       "js/game.parts/02.part",
       "js/game.parts/03.part",
       "js/game.parts/04.part",
-      "js/game.parts/05.part"
+      "js/game.parts/05.part",
+      "js/game.parts/06.part",
+      "js/game.parts/07.part",
+      "js/game.parts/08.part",
+      "js/game.parts/09.part"
     ],
-    "bytes": 68473,
-    "sha256": "f217b2f7846896d98f3b812b4cfe754beb21ec5c1247098dafa846aa1ca6522f",
-    "part_count": 5
+    "bytes": 81225,
+    "sha256": "3c6dcf31f49f049953d2c173976985857379f0843e3d2ab2cc1672a6780cad7d",
+    "part_count": 9
   }
 }

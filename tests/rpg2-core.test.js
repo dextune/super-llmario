@@ -53,9 +53,9 @@ test('six weapons with distinct stats are defined', () => {
   }
   assert.equal(MS.WEAPONS.pistol.ammo, Infinity);
   assert.ok(MS.WEAPONS.hmg.ammo > 0 && MS.WEAPONS.hmg.ammo !== Infinity);
-  assert.ok(MS.WEAPONS.shotgun.pellets > 1);
   assert.ok(MS.WEAPONS.rocket.radius > 0);
   assert.equal(MS.WEAPONS.laser.piercing, true);
+  assert.equal(MS.WEAPONS.railgun.piercing, true);
 });
 
 test('five stages with distinct themes and spawns', () => {
@@ -77,7 +77,7 @@ test('five stages with distinct themes and spawns', () => {
 
 test('enemy types with distinct roles', () => {
   const types = Object.keys(MS.ENEMY_TYPES);
-  assert.ok(types.length >= 7, 'at least 7 enemy types');
+  assert.ok(types.length >= 9, 'at least 9 enemy types');
   for (const type of types) {
     const e = MS.ENEMY_TYPES[type];
     assert.ok(e.role, type + ' has role');

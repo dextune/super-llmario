@@ -26,7 +26,7 @@ function assembleEntry(entryName, manifest = readManifest()) {
     if (!absolutePath.startsWith(ROOT + path.sep)) throw new Error(`unsafe source path: ${relativePath}`);
     return fs.readFileSync(absolutePath, 'utf8');
   });
-  const source = chunks.join('');
+  const source = chunks.join('').replace(/\r\n/g, '\n');
   const bytes = Buffer.byteLength(source, 'utf8');
   const digest = sha256(source);
   if (bytes !== entry.bytes) throw new Error(`${entryName} byte length mismatch: ${bytes} !== ${entry.bytes}`);

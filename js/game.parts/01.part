@@ -11,7 +11,7 @@
   var STATE = Object.freeze({
     TITLE: 'title', SELECT: 'select', BRIEF: 'brief',
     PLAY: 'play', PAUSED: 'paused', CLEAR: 'clear',
-    OVER: 'over', WIN: 'win',
+    OVER: 'over', WIN: 'win', BOSSRUSH: 'bossrush',
   });
   var VIEW_W = 960, VIEW_H = 624, GROUND_Y = 540;
   var GRAVITY = 1500;
@@ -49,6 +49,8 @@
   var firePressed = false;
   var grenadePressed = false;
   var pausePressed = false;
+  var dashPressed = 0; // -1 left, 1 right, 0 none
+  var lastTapL = 0, lastTapR = 0;
 
   function onKeyDown(e) {
     if (keys[e.code]) return;
@@ -58,6 +60,7 @@
 
     if (state === STATE.TITLE) {
       if (c === 'Enter' || c === 'Space') { goSelect(); e.preventDefault(); return; }
+      if (c === 'KeyB' && save.unlockedStages >= 5) { startBossRush(); e.preventDefault(); return; }
     } else if (state === STATE.SELECT) {
       if (c === 'Enter' || c === 'Space') { startStage(selectedStage); e.preventDefault(); return; }
       if (c === 'ArrowLeft' || c === 'KeyA') { selectedStage = Math.max(0, selectedStage - 1); Audio.sfx('menu'); e.preventDefault(); return; }
@@ -80,8 +83,18 @@
     }
 
     if (c === 'Space' || c === 'ArrowUp' || c === 'KeyW') input.jump = true;
-    if (c === 'ArrowLeft' || c === 'KeyA') input.left = true;
-    if (c === 'ArrowRight' || c === 'KeyD') input.right = true;
+    if (c === 'ArrowLeft' || c === 'KeyA') {
+      var tL = nowMs();
+      if (tL - lastTapL < 300 && state === STATE.PLAY) dashPressed = -1;
+      lastTapL = tL;
+      input.left = true;
+    }
+    if (c === 'ArrowRight' || c === 'KeyD') {
+      var tR = nowMs();
+      if (tR - lastTapR < 300 && state === STATE.PLAY) dashPressed = 1;
+      lastTapR = tR;
+      input.right = true;
+    }
     if (c === 'ArrowDown' || c === 'KeyS') input.down = true;
     if (c === 'KeyJ') { input.fire = true; firePressed = true; }
     if (c === 'ShiftLeft' || c === 'ShiftRight') input.run = true;

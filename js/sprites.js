@@ -3,26 +3,29 @@
 /* Metal Strike pixel-art sprite renderer.
  * String-based pixel arrays with palette colors, rendered to offscreen canvas
  * at 3× scale. Player uses composed head+body+legs for animation variety.
+ * v2: 16-wide high-detail sprites with shading, equipment, and animation.
  */
 var SpriteData = (function () {
   var SCALE = 3;
 
   var BASE_PAL = {
-    G: '#4a5a2a', g: '#2a3a1a',  // military green
-    S: '#e8c8a0',                // skin
+    G: '#4a5a2a', g: '#2a3a1a',  // military green / dark
+    H: '#7a9a5a',                // olive highlight
+    S: '#e8c8a0', P: '#c8a878',  // skin / skin shadow
     K: '#1a1a1a',                // black
     W: '#ffffff',                // white
-    B: '#5a4a3a', b: '#3a2a1a',  // brown leather
-    R: '#cc3a2a', r: '#8a1a1a',  // red
+    B: '#5a4a3a', b: '#3a2a1a',  // brown leather / dark
+    R: '#cc3a2a', r: '#8a1a1a',  // red / dark red
     O: '#d8a030',                // gold
-    A: '#6a6a6a', a: '#3a3a3a',  // gunmetal
-    T: '#8a6a4a', t: '#5a4a2a',  // tan (rebel)
-    C: '#4a8a3a', c: '#2a5a1a',  // camo
+    A: '#6a6a6a', a: '#3a3a3a',  // gunmetal / dark
+    T: '#8a6a4a', t: '#5a4a2a',  // tan (rebel) / dark
+    C: '#4a8a3a', c: '#2a5a1a',  // camo / dark camo
     D: '#cc5a1a',                // flame orange
-    E: '#8a2a6a', e: '#5a1a4a',  // purple (commander)
-    M: '#5a7a8a', m: '#3a5a6a',  // steel blue
-    N: '#7a8a9a', n: '#4a5a6a',  // light steel
+    E: '#8a2a6a', e: '#5a1a4a',  // purple / dark
+    M: '#5a7a8a', m: '#3a5a6a',  // steel blue / dark
+    N: '#7a8a9a', n: '#4a5a6a',  // light steel / dark
     Y: '#e8d838',                // yellow
+    L: '#a0b8c8',                // light blue-grey
   };
 
   function pad(rows, w) {
@@ -61,343 +64,410 @@ var SpriteData = (function () {
     return f;
   }
 
-  /* ========== PLAYER — 14 wide ========== */
+  /* ========== PLAYER — 16 wide, high detail ========== */
   var P_HEAD = [
-    '....RRRRRR....',
-    '...RSSSSSSR...',
-    '..RSSSSSSSSR..',
-    '..RSKKSSKKSR..',
-    '..RSSSSSSSSR..',
-    '...RSSSSSR....',
+    '....gGGGGGGg....',
+    '...GGGGGGGGGG...',
+    '..GGRRRRRRRRGG..',
+    '..HSSSSSSSSSSH..',
+    '..RWKSSSSSSKWR..',
+    '..PSSSSmmSSSSP..',
+    '...RSSSSSSSR....',
   ];
   var P_HEAD_HURT = [
-    '....RRRRRR....',
-    '...RSSSSSSR...',
-    '..RSSSSSSSSR..',
-    '..RXKXSSKXSR..',
-    '..RSSSSSSSSR..',
-    '...RSSSSSR....',
+    '....gGGGGGGg....',
+    '...GGGGGGGGGG...',
+    '..GGRRRRRRRRGG..',
+    '..HSSSSSSSSSSH..',
+    '..RXKXSSSSKXSR..',
+    '..PSSSSmmSSSSP..',
+    '...RSSSSSSSR....',
   ];
 
   var P_BODY = [
-    '..GGGGGGGGGG..',
-    '.GGGGGGGGGGAA.',
-    'GGGGBBBBGGAAa.',
-    'GGGGSSGGGGAa..',
-    'GGGGBBBBBGGGGG',
-    '..GGGGGGGGGG..',
+    '...gGGGGGGGGg...',
+    '..HGGNGGGGNGGH..',
+    '.GGGGBBBBGGGGAA.',
+    'GGCGGSSGGGGGAa..',
+    'GGGGBBBBBGGGGGGG',
+    'GGOGGBBBBGGGGGGG',
+    '...gGGGGGGGGg...',
   ];
   var P_BODY_SHOOT = [
-    '..GGGGGGGGGGAA',
-    '.GGGGGGGGGGAa.',
-    'GGGGBBBBGGAAa.',
-    'GGGGSSGGGGAa..',
-    'GGGGBBBBBGGGGG',
-    '..GGGGGGGGGG..',
+    '...gGGGGGGGGgAA.',
+    '..HGGNGGGGNGGAa.',
+    '.GGGGBBBBGGGAAa.',
+    'GGCGGSSGGGGAa...',
+    'GGGGBBBBBGGGGGGG',
+    'GGOGGBBBBGGGGGGG',
+    '...gGGGGGGGGg...',
   ];
   var P_BODY_CROUCH = [
-    '..GGGGGGGGGGAA',
-    '.GGGGBBBBGAa..',
-    'GGGGSSGGAa....',
-    'GGGGBBBBBGGGGG',
+    '...gGGGGGGGGgAA.',
+    '..GGGGBBBBGAa...',
+    '.GGCGGSSGGAa....',
+    'GGOGGBBBBGGGGGGG',
+    '...gGGGGGGGGg...',
   ];
 
   var P_LEGS_IDLE = [
-    '..GGGGGGGGGG..',
-    '..GGG....GGG..',
-    '..BBB....BBB..',
-    '.bBBb....bBBb.',
+    '...gGGGGGGGGg...',
+    '...GGG....GGG...',
+    '..NBBB....BBBN..',
+    '..bBBb....bBBb..',
+    '.bb..b....b..bb.',
   ];
   var P_LEGS_RUN1 = [
-    '..GGGGGGGGGG..',
-    '..GGGGG..GGG..',
-    '..BBBB...BBB..',
-    'BBBb......BBb.',
+    '...gGGGGGGGGg...',
+    '...GGGGG..GGG...',
+    '..NBBBB...BBBN..',
+    'BBBb.......bBBb.',
+    'bb..........bb..',
   ];
   var P_LEGS_RUN2 = [
-    '..GGGGGGGGGG..',
-    '..GGGGGGGGG...',
-    '..BBBBBBBBB...',
-    '..BBBBBBBBB...',
+    '...gGGGGGGGGg...',
+    '...GGGGGGGGGG...',
+    '..NBBBBBBBBBBN..',
+    '..BBBBBBBBBBBB..',
+    '.bb..........bb.',
   ];
   var P_LEGS_RUN3 = [
-    '..GGGGGGGGGG..',
-    '..GGG..GGGGG..',
-    '..BBB...BBBB..',
-    '.BBb......bBBB',
+    '...gGGGGGGGGg...',
+    '...GGG..GGGGG...',
+    '..NBBB...BBBBN..',
+    '.BBb.......bBBB.',
+    '..bb..........bb',
   ];
   var P_LEGS_RUN4 = [
-    '..GGGGGGGGGG..',
-    '...GGGGGGGGG..',
-    '...BBBBBBBBB..',
-    '.bBBb....bBBb.',
+    '...gGGGGGGGGg...',
+    '....GGGGGGGGG...',
+    '..NBBBBBBBBBBN..',
+    '..bBBb....bBBb..',
+    '.bb..b....b..bb.',
   ];
   var P_LEGS_JUMP = [
-    '..GGGGGGGGGG..',
-    '..GGGG..GGGG..',
-    '..BBB....BBB..',
-    '..BB......BB..',
+    '...gGGGGGGGGg...',
+    '...GGGG..GGGG...',
+    '..NBBB....BBBN..',
+    '..BBB......BBB..',
+    '..bb........bb..',
   ];
   var P_LEGS_CROUCH = [
-    '..GGGGGGGGGG..',
-    '..BBBBBBBBBB..',
-    '.bBBBBBBBBBBb.',
+    '...gGGGGGGGGg...',
+    '..NBBBBBBBBBBN..',
+    '.bBBBBBBBBBBBBb.',
   ];
 
   var P_DEAD = [
-    '..............',
-    '...RR......RR.',
-    '..RSSR....RSSR',
-    '.RSSSSR..RSSSS',
-    '..RSSSSSSSSSR.',
-    '...RSSSSSSSR..',
-    '..GGGGGGGGGG..',
-    '.GGGGGGGGGGAA.',
-    'GGGGBBBBGGAAa.',
-    'GGGGSSGGGGAa..',
-    'bBBB....BBBb..',
-    'bB........bB..',
+    '................',
+    '....RR......RR..',
+    '...RSSR....RSSR.',
+    '..RSSSSR..RSSSSR',
+    '...RSSSSSSSSSSR.',
+    '....RSSSSSSSR...',
+    '...gGGGGGGGGg...',
+    '..HGGNGGGGNGGH..',
+    '.GGGGBBBBGGGGAA.',
+    'GGCGGSSGGGGGAa..',
+    '.bBBB....BBBb...',
+    '.bB........bB...',
   ];
 
-  /* ========== REBEL GRUNT — 14 wide ========== */
+  /* ========== REBEL GRUNT — 16 wide ========== */
   var REBEL_HEAD = [
-    '....TTTTTT....',
-    '...TTTTTTTT...',
-    '..TSSSSSSTT...',
-    '..TSKKSSKKST..',
-    '..TSSSSSSSST..',
-    '...TSSSSST....',
+    '....tTTTTTTt....',
+    '...TTTTTTTTTT...',
+    '..TTSSSSSSTTT...',
+    '..TSKKSSSSKKST..',
+    '..TSSSSSSSSSST..',
+    '..TPSSSSSSSSTP..',
+    '...TSSSSSSST....',
   ];
   var REBEL_BODY = [
-    '..TTTTTTTTTT..',
-    '.TTTTTTTTTTTT.',
-    'TTTTKKKKTTTTTT',
-    'TTTSSSSTTTTTTT',
-    'TTTTBBBTTTTTTT',
-    '..TTTTTTTTTT..',
+    '...tTTTTTTTTt...',
+    '..TTTTTTTTTTTT..',
+    '.TTTTKKKKTTTTTT.',
+    'TTTSSSSTTTTTTTT.',
+    'TTTTTBBBTTTTTTT.',
+    '..tTTTTTTTTTt...',
   ];
   var REBEL_LEGS_I = [
-    '..TTTTTTTTTT..',
-    '..TTT....TTT..',
-    '..ttt....ttt..',
-    '.tttt....tttt.',
+    '...tTTTTTTTTt...',
+    '...TTT....TTT...',
+    '...ttt....ttt...',
+    '..tttt....tttt..',
+    '.tt..t....t..tt.',
   ];
   var REBEL_LEGS_W1 = [
-    '..TTTTTTTTTT..',
-    '..TTTTT..TTT..',
-    '..tttt...ttt..',
-    'tttt......ttt.',
+    '...tTTTTTTTTt...',
+    '...TTTTT..TTT...',
+    '...tttt...ttt...',
+    'tttt.......ttt..',
+    'tt..........tt..',
   ];
   var REBEL_LEGS_W2 = [
-    '..TTTTTTTTTT..',
-    '..TTTTTTTTT...',
-    '..ttttttttt...',
-    '..ttttttttt...',
+    '...tTTTTTTTTt...',
+    '...TTTTTTTTTT...',
+    '...tttttttttt...',
+    '..tttttttttttt..',
+    '.tt..........tt.',
   ];
   var REBEL_DEAD = [
-    '..............',
-    '...TT......TT.',
-    '..TSSR....TSSR',
-    '.TSSSSR..TSSSS',
-    '..TSSSSSSSSSR.',
-    '...TSSSSSSSR..',
-    '..TTTTTTTTTT..',
-    '.TTTTTTTTTTTT.',
-    'TTTTKKKKTTTTTT',
-    'tttt....tttt..',
-    'tt........tt..',
+    '................',
+    '....TT......TT..',
+    '...TSSR....TSSR.',
+    '..TSSSSR..TSSSSR',
+    '...TSSSSSSSSSR..',
+    '....TSSSSSSSR...',
+    '...tTTTTTTTTt...',
+    '..TTTTTTTTTTTT..',
+    '.TTTTKKKKTTTTTT.',
+    'tttt....tttt....',
+    'tt........tt....',
   ];
 
   /* ========== RIFLEMAN ========== */
   var RIFLE_BODY = [
-    '..TTTTTTTTTTAA',
-    '.TTTTTTTTTTAa.',
-    'TTTTKKKKTTAAa.',
-    'TTTSSSSTTTAa..',
-    'TTTTBBBTTTTTTT',
-    '..TTTTTTTTTT..',
+    '...tTTTTTTTTtAA.',
+    '..TTTTTTTTTTAa..',
+    '.TTTTKKKKTTAAa..',
+    'TTTSSSSTTTTAa...',
+    'TTTTTBBBTTTTTTT.',
+    '..tTTTTTTTTTt...',
   ];
 
   /* ========== SHIELD SOLDIER ========== */
   var SHIELD_BODY = [
-    '..AAATTTTTTAA.',
-    '.AAAATTTTTTAAA',
-    'AAAATTKKKKAAAA',
-    'AAAATTSSSSAAAA',
-    '.AA.ATTBBTTAAA',
-    '....TTTTTTTT..',
+    '..AAATTTTTTTTAA.',
+    '.AAAATTTTTTTTAAA',
+    'AAAATTKKKKTTAAAA',
+    'AAAATTSSSSTTAAAA',
+    '.AA.TTTBBTTTAAA.',
+    '....tTTTTTTTTt..',
   ];
 
   /* ========== BAZOOKA SOLDIER ========== */
   var BAZOOKA_BODY = [
-    '..TTTTTTTAAAA.',
-    '.TTTTTTTTAAAa.',
-    'TTTTKKKKAAAa..',
-    'TTTSSSSAa.....',
-    'TTTTBBBTTTTTTT',
-    '..TTTTTTTTTT..',
+    '...tTTTTTTTAAAA.',
+    '..TTTTTTTTTAAAa.',
+    '.TTTTKKKKAAAa...',
+    'TTTSSSSAa.......',
+    'TTTTTBBBTTTTTTT.',
+    '..tTTTTTTTTTt...',
   ];
 
   /* ========== GRENADIER ========== */
   var GREN_BODY = [
-    '..TTTTTTTTOO..',
-    '.TTTTTTTTTOO..',
-    'TTTTKKKKTTTTTT',
-    'TTTSSSSTTTTTTT',
-    'TTTTBBBTTTTTTT',
-    '..TTTTTTTTTT..',
+    '...tTTTTTTTTOO..',
+    '..TTTTTTTTTTOO..',
+    '.TTTTKKKKTTTTTT.',
+    'TTTSSSSTTTTTTTT.',
+    'TTTTTBBBTTTTTTT.',
+    '..tTTTTTTTTTt...',
   ];
 
-  /* ========== TURRET — 14×10 ========== */
+  /* ========== SNIPER ========== */
+  var SNIPER_BODY = [
+    '...tTTTTTTTTtAA.',
+    '..TTTTTTTTTTAa..',
+    '.TTTTKKKKTTTAa..',
+    'TTTSSSSTTTTAa...',
+    'TTTTTBBBTTTTTTT.',
+    '..tTTTTTTTTTt...',
+  ];
+
+  /* ========== DRONE — 12×8 ========== */
+  var DRONE1 = [
+    '............',
+    '..NNNNNNNN..',
+    '.NNWWKKWWNN.',
+    'NNNNKKKKNNNN',
+    '.NNNNNNNNNN.',
+    '..aa....aa..',
+    '...a....a...',
+    '............',
+  ];
+  var DRONE2 = [
+    '............',
+    '..NNNNNNNN..',
+    '.NNWWKKWWNN.',
+    'NNNNKKKKNNNN',
+    '.NNNNNNNNNN.',
+    '..aa....aa..',
+    '....a..a....',
+    '............',
+  ];
+
+  /* ========== TURRET — 16×12 ========== */
   var TURRET1 = [
-    '..............',
-    '........AAAA..',
-    '.......AAAAA..',
-    '..NNNNNNAAaA..',
-    '.NNNNNNNNNaA..',
-    'NNWWWWWWWWNNNN',
-    'NNKKKKKKKKNNNN',
-    'NNNNNNNNNNNNNN',
-    '.nnnnnnnnnnnn.',
-    '..nnnnnnnnnn..',
+    '................',
+    '.........AAAA...',
+    '........AAAAA...',
+    '...NNNNNNAAaA...',
+    '..NNNNNNNNNaA...',
+    '.NNWWWWWWWWNNNN.',
+    '.NNKKKKKKKKNNNN.',
+    'NNNNNNNNNNNNNNNN',
+    '.nnnnnnnnnnnnnn.',
+    '..nnnnnnnnnnnn..',
+    '...nnnnnnnnnn...',
+    '................',
   ];
   var TURRET2 = [
-    '......AAAA....',
-    '.....AAAAA....',
-    '..NNNNNAAaA...',
-    '.NNNNNNNaA....',
-    'NNNNNNNNAa....',
-    'NNWWWWWWWWNNNN',
-    'NNKKKKKKKKNNNN',
-    'NNNNNNNNNNNNNN',
-    '.nnnnnnnnnnnn.',
-    '..nnnnnnnnnn..',
+    '................',
+    '.......AAAA.....',
+    '......AAAAA.....',
+    '...NNNNNAAaA....',
+    '..NNNNNNNaA.....',
+    '.NNNNNNNNAa.....',
+    '.NNWWWWWWWWNNNN.',
+    '.NNKKKKKKKKNNNN.',
+    'NNNNNNNNNNNNNNNN',
+    '.nnnnnnnnnnnnnn.',
+    '..nnnnnnnnnnnn..',
+    '...nnnnnnnnnn...',
   ];
 
-  /* ========== TANK — 28×14 ========== */
+  /* ========== TANK — 30×16 ========== */
   var TANK_BODY = [
-    '............................',
-    '........CCCCCC..............',
-    '.......CCCCCCCC.............',
-    '......CCCKKKKCCC............',
-    '.....CCCCWWWWCCCC...........',
-    '....CCCCCKKKKCCCCAAAAAAAAAAA',
-    '...CCCCCCCCCCCCCCCCAAAAAAAAA',
-    '..CCCCCCCCCCCCCCCCCAAAAAAAA.',
-    '.nnnnnnnnnnnnnnnnnnnnnnnnn..',
-    'nnnnnnnnnnnnnnnnnnnnnnnnnnn.',
-    'KKKK..KKKK..KKKK..KKKK..KKKK',
-    'aaaa..aaaa..aaaa..aaaa..aaaa',
-    '............................',
-    '............................',
+    '..............................',
+    '.........CCCCCC...............',
+    '........CCCCCCCC..............',
+    '.......CCCKKKKCCC.............',
+    '......CCCCWWWWCCCC............',
+    '.....CCCCCKKKKCCCCAAAAAAAAAAAA',
+    '....CCCCCCCCCCCCCCCCAAAAAAAAAA',
+    '...CCCCCCCCCCCCCCCCCAAAAAAAA..',
+    '..CCCCCCCCCCCCCCCCCCCCAAAAAA..',
+    '.nnnnnnnnnnnnnnnnnnnnnnnnnnn..',
+    'nnnnnnnnnnnnnnnnnnnnnnnnnnnnn.',
+    'KKKK..KKKK..KKKK..KKKK..KKKK.',
+    'aaaa..aaaa..aaaa..aaaa..aaaa.',
+    '..............................',
+    '..............................',
+    '..............................',
   ];
   var TANK_TURRET1 = [
-    '............................',
-    '............................',
-    '............AAA.............',
-    '...........AAaA.............',
-    '..........CCCCCCC...........',
-    '.........CCCKKKCCC..........',
-    '........CCCCWWWCCCC.........',
-    '.......CCCCCKKKCCCCC........',
-    '............................',
-    '............................',
-    '............................',
-    '............................',
-    '............................',
-    '............................',
+    '..............................',
+    '..............................',
+    '.............AAA..............',
+    '............AAaA..............',
+    '...........CCCCCCC............',
+    '..........CCCKKKCCC...........',
+    '.........CCCCWWWCCCC..........',
+    '........CCCCCKKKCCCCC.........',
+    '..............................',
+    '..............................',
+    '..............................',
+    '..............................',
+    '..............................',
+    '..............................',
+    '..............................',
+    '..............................',
   ];
 
-  /* ========== HELICOPTER — 22×12 ========== */
+  /* ========== HELICOPTER — 24×14 ========== */
   var CHOPPER1 = [
-    '......................',
-    '...MMMM...............',
-    '..MMMMMM..............',
-    '.MMWKWKWMM............',
-    'MMMMKKKKKMMMMAAAA.....',
-    'MMMWWWWWWMMMMAAAA.....',
-    'MMMMKKKKKMMMMAAaA.....',
-    '.MMMMMMMMMMMMMAa......',
-    '..nnnnnnnnnnnn........',
-    '....MM..MM............',
-    '....nn..nn............',
-    '......................',
+    '........................',
+    '....MMMM................',
+    '...MMMMMM...............',
+    '..MMWKWKWMM.............',
+    '.MMMMKKKKKMMMMAAAA......',
+    'MMMMWWWWWWMMMMAAAA......',
+    'MMMMKKKKKMMMMAAaA.......',
+    '.MMMMMMMMMMMMMAa........',
+    '..nnnnnnnnnnnn..........',
+    '....MM..MM..............',
+    '....nn..nn..............',
+    '........................',
+    '........................',
+    '........................',
   ];
   var CHOPPER2 = [
-    '......................',
-    '..M....M..............',
-    '..MM..MM..............',
-    '.MMWKWKWMM............',
-    'MMMMKKKKKMMMMAAAA.....',
-    'MMMWWWWWWMMMMAAAA.....',
-    'MMMMKKKKKMMMMAAaA.....',
-    '.MMMMMMMMMMMMMAa......',
-    '..nnnnnnnnnnnn........',
-    '....nn..nn............',
-    '....MM..MM............',
-    '......................',
+    '........................',
+    '..M....M................',
+    '..MM..MM................',
+    '..MMWKWKWMM.............',
+    '.MMMMKKKKKMMMMAAAA......',
+    'MMMMWWWWWWMMMMAAAA......',
+    'MMMMKKKKKMMMMAAaA.......',
+    '.MMMMMMMMMMMMMAa........',
+    '..nnnnnnnnnnnn..........',
+    '....nn..nn..............',
+    '....MM..MM..............',
+    '........................',
+    '........................',
+    '........................',
   ];
 
-  /* ========== WEAPON CRATE — 12×10 ========== */
+  /* ========== WEAPON CRATE — 14×12 ========== */
   function crateSprite(letter) {
     return [
-      '..OOOOOOOO..',
-      '.OOOOOOOOOO.',
-      'OO' + letter + 'OOOOOO' + letter + 'OOAA',
-      'OOOOOOOOOOAA',
-      'OOOO' + letter + 'OOOOOO' + letter + 'Aa',
-      'OOOOOOOOOOAa',
-      'OO' + letter + 'OOOOOO' + letter + 'OOAA',
-      '.OOOOOOOOOO.',
-      '..OOOOOOOO..',
-      '...aaaaaa...',
+      '..OOOOOOOO....',
+      '.OOOOOOOOOO...',
+      'OO' + letter + 'OOOOOO' + letter + 'OOAA..',
+      'OOOOOOOOOOAA..',
+      'OOOO' + letter + 'OOOOOO' + letter + 'Aa..',
+      'OOOOOOOOOOAa..',
+      'OO' + letter + 'OOOOOO' + letter + 'OOAA..',
+      '.OOOOOOOOOO...',
+      '..OOOOOOOO....',
+      '...aaaaaa.....',
+      '..aA..Aa......',
+      '..............',
     ];
   }
 
-  /* ========== POW (Prisoner) — 12×14 ========== */
+  /* ========== POW (Prisoner) — 14×16 ========== */
   var POW_TIED = [
-    '............',
-    '...SSSSSS...',
-    '..SKKSSKKS..',
-    '..SSSSSSSS..',
-    '...SSSSSS...',
-    '..OOOOOOOO..',
-    '.OOOOOOOOOO.',
-    'OOOOOOOOOOOO',
-    'OOOOOOOOOOOO',
-    '.OOOOOOOOOO.',
-    '..OO....OO..',
-    '..BB....BB..',
-    '.bBb..bBb...',
-    '............',
+    '..............',
+    '....SSSSSS....',
+    '...SKKSSKKS...',
+    '...SSSSSSSS...',
+    '....SSSSSS....',
+    '...OOOOOOOO...',
+    '..OOOOOOOOOO..',
+    '.OOOOOOOOOOOO.',
+    'OOOOOOOOOOOOOO',
+    '.OOOOOOOOOOOO.',
+    '..OO......OO..',
+    '..BB......BB..',
+    '.bBb....bBb...',
+    '.bb......bb...',
+    '..............',
+    '..............',
   ];
   var POW_FREE = [
-    '............',
-    '...SSSSSS...',
-    '..SKKSSKKS..',
-    '..SSSSSSSS..',
-    '...SSSSSS...',
-    '..OOOOOOOO..',
-    '.OOOOOOOOOO.',
-    'OOOYOOOOOOOO',
-    'OOOOOOYOOOOO',
-    '.OOOOOOOOOO.',
-    '..OO....OO..',
-    '..BB....BB..',
-    '.bBb..bBb...',
-    '............',
+    '..............',
+    '....SSSSSS....',
+    '...SKKSSKKS...',
+    '...SSSSSSSS...',
+    '....SSSSSS....',
+    '...OOOOOOOO...',
+    '..OOOOOOOOOO..',
+    '.OOOYOOOOOOOO.',
+    'OOOOOOYOOOOOOO',
+    '.OOOOOOOOOOOO.',
+    '..OO......OO..',
+    '..BB......BB..',
+    '.bBb....bBb...',
+    '.bb......bb...',
+    '..............',
+    '..............',
   ];
 
-  /* ========== GRENADE — 8×8 ========== */
+  /* ========== GRENADE — 10×10 ========== */
   var GRENADE = [
-    '..AA....',
-    '..aa....',
-    '.OOOO...',
-    'OOOOOO..',
-    'OOgOOgO.',
-    'OgOOgOOO',
-    'OOOOOOO.',
-    '.OOOOO..',
+    '...AA.....',
+    '...aa.....',
+    '..OOOO....',
+    '.OOOOOO...',
+    '.OOgOOgO..',
+    'OgOOgOOOO.',
+    'OOOOOOOOO.',
+    '.OOOOOOO..',
+    '..OOOOO...',
+    '..........',
   ];
 
   /* ========== BUILD ALL ========== */
@@ -437,6 +507,12 @@ var SpriteData = (function () {
     built.grenadier_idle = render(REBEL_HEAD.concat(GREN_BODY, REBEL_LEGS_I));
     built.grenadier_throw = render(REBEL_HEAD.concat(GREN_BODY, REBEL_LEGS_W1));
 
+    built.sniper_idle = render(REBEL_HEAD.concat(SNIPER_BODY, REBEL_LEGS_I));
+    built.sniper_shoot = render(REBEL_HEAD.concat(SNIPER_BODY, REBEL_LEGS_W2));
+
+    built.drone1 = render(DRONE1);
+    built.drone2 = render(DRONE2);
+
     built.turret1 = render(TURRET1);
     built.turret2 = render(TURRET2);
 
@@ -448,10 +524,10 @@ var SpriteData = (function () {
 
     // Props
     built.crate_hmg = render(crateSprite('H'));
-    built.crate_shotgun = render(crateSprite('S'));
     built.crate_rocket = render(crateSprite('R'));
-    built.crate_flame = render(crateSprite('F'));
+    built.crate_arc = render(crateSprite('A'));
     built.crate_laser = render(crateSprite('L'));
+    built.crate_railgun = render(crateSprite('G'));
     built.crate_default = render(crateSprite('?'));
 
     built.pow_tied = render(POW_TIED);
@@ -468,14 +544,16 @@ var SpriteData = (function () {
     shield: { idle: 'shield_idle', walk: 'shield_walk', dead: 'rebel_dead' },
     bazooka: { idle: 'bazooka_idle', aim: 'bazooka_aim', dead: 'rebel_dead' },
     grenadier: { idle: 'grenadier_idle', throw: 'grenadier_throw', dead: 'rebel_dead' },
+    sniper: { idle: 'sniper_idle', shoot: 'sniper_shoot', dead: 'rebel_dead' },
+    drone: { idle: 'drone1', fly: 'drone2' },
     turret: { idle: 'turret1', fire: 'turret2' },
     tank: { idle: 'tank_body', turret: 'tank_turret' },
     chopper: { idle: 'chopper1', rotor: 'chopper2' },
   };
 
   var CRATE_MAP = {
-    hmg: 'crate_hmg', shotgun: 'crate_shotgun', rocket: 'crate_rocket',
-    flame: 'crate_flame', laser: 'crate_laser',
+    hmg: 'crate_hmg', rocket: 'crate_rocket',
+    arc: 'crate_arc', laser: 'crate_laser', railgun: 'crate_railgun',
   };
 
   function getFlip(name) {
