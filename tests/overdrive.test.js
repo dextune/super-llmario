@@ -3,6 +3,8 @@
 const assert = require('assert');
 const vm = require('vm');
 const { assembleEntry } = require('../scripts/assemble-sources');
+require('../js/overdrive-runtime');
+require('../js/overdrive-audio');
 const overdrive = require('../js/overdrive');
 
 const assembled = assembleEntry('ms-game.js');
